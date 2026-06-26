@@ -17,18 +17,34 @@
             box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
         }
 
-        textarea {
+        /* 스크롤바 디자인 */
+        .editor-scroll {
             scrollbar-width: thin;
             scrollbar-color: #cbd5e1 transparent;
         }
 
-        textarea::-webkit-scrollbar {
+        .editor-scroll::-webkit-scrollbar {
             width: 6px;
         }
 
-        textarea::-webkit-scrollbar-thumb {
+        .editor-scroll::-webkit-scrollbar-thumb {
             background-color: #cbd5e1;
             border-radius: 10px;
+        }
+
+        /* ContentEditable Placeholder 구현 */
+        [contenteditable=true]:empty:before {
+            content: attr(placeholder);
+            color: #94a3b8;
+            pointer-events: none;
+            display: block;
+        }
+
+        /* 입력 및 결과창 내부 이미지 스타일 보존 및 레이아웃 붕괴 방지 */
+        #inputBox img, #outputBox img {
+            max-width: 100%;
+            display: inline-block;
+            vertical-align: middle;
         }
 
         /* 로딩 효과 (매우 빠르게 처리됨) */
@@ -60,18 +76,28 @@
                     </svg>
                 </div>
                 <h1 class="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight">로컬 텍스트 클리너</h1>
-                <p class="text-slate-500 mt-2">AI 연결 없이도 빠르게 텍스트를 정제하고 교정합니다.</p>
+                <p class="text-slate-500 mt-2">강조 스타일과 이미지는 그대로 유지하고 이모티콘과 불필요한 줄바꿈만 정제합니다.</p>
             </header>
 
             <div class="space-y-6">
                 <!-- 입력 섹션 -->
                 <div>
-                    <label for="inputBox" class="block text-sm font-semibold text-slate-700 mb-2 ml-1">내용 입력</label>
-                    <textarea 
+                    <div class="flex items-center justify-between mb-2 ml-1">
+                        <label for="inputBox" class="text-sm font-semibold text-slate-700">내용 입력</label>
+                        <!-- 서식 툴바 -->
+                        <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/60">
+                            <button type="button" onclick="format('bold')" title="굵게" class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-700 hover:bg-slate-200 font-bold text-sm transition-all">B</button>
+                            <button type="button" onclick="format('italic')" title="기울임" class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-700 hover:bg-slate-200 italic text-sm transition-all">I</button>
+                            <button type="button" onclick="format('underline')" title="밑줄" class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-700 hover:bg-slate-200 underline text-sm transition-all">U</button>
+                        </div>
+                    </div>
+                    <!-- contenteditable을 통해 볼드체/스타일 원본 유지 -->
+                    <div 
                         id="inputBox" 
-                        placeholder="변환할 문장을 입력하세요... (이모티콘 제거, 마침표 보정 등 수행)" 
-                        class="w-full h-48 p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none resize-none text-slate-700 placeholder:text-slate-400"
-                    ></textarea>
+                        contenteditable="true"
+                        placeholder="변환할 문장을 입력하거나 붙여넣으세요... 굵은 글씨와 이미지 크기는 그대로 보존됩니다." 
+                        class="w-full h-48 p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none overflow-y-auto text-slate-700 editor-scroll"
+                    ></div>
                 </div>
 
                 <!-- 작업 버튼 -->
@@ -91,18 +117,18 @@
                     </button>
                 </div>
 
-                <!-- 결과 섹션 (기본 숨김) -->
+                <!-- 결과 섹션 -->
                 <div id="resultArea" class="hidden animate-in fade-in slide-in-from-top-4 duration-300">
                     <div class="flex items-center justify-between mb-2 px-1">
                         <label class="text-sm font-semibold text-slate-700">정제된 결과</label>
                         <span id="charCount" class="text-xs text-slate-400">0자</span>
                     </div>
                     <div class="relative group">
-                        <textarea 
+                        <!-- 결과를 똑같이 서식 있는 상태로 렌더링 -->
+                        <div 
                             id="outputBox" 
-                            readonly 
-                            class="w-full h-48 p-4 bg-blue-50/50 border border-blue-100 rounded-2xl text-slate-800 outline-none resize-none"
-                        ></textarea>
+                            class="w-full h-48 p-4 bg-blue-50/50 border border-blue-100 rounded-2xl text-slate-800 outline-none overflow-y-auto editor-scroll"
+                        ></div>
                         
                         <button 
                             onclick="copyResult()"
@@ -120,59 +146,186 @@
 
         <!-- 하단 정보 -->
         <p class="text-center text-slate-400 text-sm mt-8">
-            인터넷 연결 없이 브라우저 내에서 즉시 처리됩니다.
+            인터넷 연결 없이 안전하게 브라우저 내에서 텍스트 서식을 보존하며 정제합니다.
         </p>
     </div>
 
     <!-- 토스트 알림 메시지 상자 -->
     <div id="toast" class="fixed bottom-8 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur-md text-white px-6 py-3 rounded-2xl text-sm font-medium opacity-0 transition-all pointer-events-none z-50 shadow-xl">
-        클립보드에 복사되었습니다!
+        클립보드에 복사되었습니다.
     </div>
 
     <script>
+        // 간단한 글자 스타일링 수행 기능
+        function format(command) {
+            document.execCommand(command, false, null);
+            document.getElementById('inputBox').focus();
+        }
+
+        // HTML 내부의 텍스트 노드들을 순회하며 필요한 요소들만 지우는 유틸리티
+        function cleanTextNodes(node) {
+            if (node.nodeType === Node.TEXT_NODE) {
+                let text = node.nodeValue;
+                // 1. 모든 종류의 이모티콘 삭제 정규식
+                text = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F1E0}-\u{1F1FF}\u{200D}\u{FE0F}]/gu, '');
+                
+                // 2. 요청 기호 제거 (쉼표, #, * 단, markdown 문법 별표가 아닌 일반 별표 정제 대상 유지)
+                text = text.replace(/[,#*]/g, '');
+                node.nodeValue = text;
+            } else if (node.nodeType === Node.ELEMENT_NODE) {
+                // IMG 태그나 다른 중요 요소들은 자식 탐색을 스킵하거나 그대로 둡니다.
+                if (node.tagName === 'IMG') {
+                    return; // 이미지는 자체로 완전하므로 가공을 건너뜁니다.
+                }
+                // 자식 노드들을 계속 탐색
+                for (let i = 0; i < node.childNodes.length; i++) {
+                    cleanTextNodes(node.childNodes[i]);
+                }
+            }
+        }
+
+        // 가장 마지막 텍스트 노드를 찾아주는 헬퍼 함수
+        function getLastTextNode(node) {
+            if (node.nodeType === Node.TEXT_NODE) {
+                return node;
+            }
+            for (let i = node.childNodes.length - 1; i >= 0; i--) {
+                const found = getLastTextNode(node.childNodes[i]);
+                if (found && found.nodeValue.trim().length > 0) {
+                    return found;
+                }
+            }
+            return null;
+        }
+
+        // 마침표 누락 시 보완 기능 (이미지 태그 뒤에 마침표가 어색하게 들어가지 않도록 텍스트 노드를 타겟팅)
+        function ensurePeriod(element) {
+            const lastTextNode = getLastTextNode(element);
+            if (lastTextNode) {
+                const text = lastTextNode.nodeValue.trimRight();
+                if (text.length > 0 && !/[.!?]$/.test(text)) {
+                    // 공백을 보존하며 문장의 끝 부분 텍스트 노드에 직접 마침표를 추가합니다.
+                    lastTextNode.nodeValue = lastTextNode.nodeValue.replace(/\s*$/, '.') + ' ';
+                }
+            }
+        }
+
+        // 줄바꿈 구조 정리 및 종결 어미 마침표(.) 추가
+        function cleanStructureAndAddPeriods(tempDiv) {
+            const resultDiv = document.createElement('div');
+            let currentParagraph = null;
+
+            function flushCurrentParagraph() {
+                if (currentParagraph) {
+                    const text = currentParagraph.textContent.trim();
+                    const hasImage = currentParagraph.querySelector('img') !== null;
+                    // 텍스트나 이미지가 있는 경우에만 처리 진행
+                    if (text.length > 0 || hasImage) {
+                        ensurePeriod(currentParagraph);
+                        resultDiv.appendChild(currentParagraph);
+                    }
+                    currentParagraph = null;
+                }
+            }
+
+            // 최상위 노드들을 분석하여 줄바꿈 및 문장 끝 체크
+            Array.from(tempDiv.childNodes).forEach(node => {
+                const isBlock = node.nodeType === Node.ELEMENT_NODE && 
+                                ['DIV', 'P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI'].includes(node.tagName);
+                const isBr = node.nodeType === Node.ELEMENT_NODE && node.tagName === 'BR';
+
+                if (isBlock) {
+                    flushCurrentParagraph();
+                    
+                    const blockText = node.textContent.trim();
+                    const hasImage = node.querySelector('img') !== null;
+                    if (blockText.length > 0 || hasImage) {
+                        const clonedBlock = node.cloneNode(true);
+                        ensurePeriod(clonedBlock);
+                        resultDiv.appendChild(clonedBlock);
+                    }
+                } else if (isBr) {
+                    flushCurrentParagraph();
+                } else {
+                    // 인라인 태그들(text, b, strong, span, em, img 등)은 하나의 문맥 문장으로 누적 병합
+                    if (!currentParagraph) {
+                        currentParagraph = document.createElement('div');
+                        currentParagraph.className = "mb-2"; // 각 문단 간격 조정
+                    }
+                    currentParagraph.appendChild(node.cloneNode(true));
+                }
+            });
+            
+            flushCurrentParagraph();
+            return resultDiv.innerHTML;
+        }
+
+        // 로컬 정제 핵심 함수
         function processTextLocal() {
             const inputBox = document.getElementById('inputBox');
-            const input = inputBox.value.trim();
-            if (!input) return;
+            
+            // 워드 등 외부 편집기가 이미지 크기를 정상적으로 인지할 수 있도록, 
+            // 실제 브라우저 상에 렌더링되거나 정의된 크기(너비/높이)를 물리적인 HTML5 속성과 절대 인라인 CSS 스타일로 직접 주입합니다.
+            const liveImages = inputBox.querySelectorAll('img');
+            liveImages.forEach(img => {
+                const computed = window.getComputedStyle(img);
+                const rect = img.getBoundingClientRect();
+                
+                let w = img.style.width || computed.width;
+                let h = img.style.height || computed.height;
+                
+                if (!w || w === 'auto') {
+                    w = rect.width ? rect.width + 'px' : (img.width ? img.width + 'px' : '');
+                }
+                if (!h || h === 'auto') {
+                    h = rect.height ? rect.height + 'px' : (img.height ? img.height + 'px' : '');
+                }
+                
+                const numW = parseFloat(w);
+                const numH = parseFloat(h);
+                
+                // 워드가 확실하게 읽어들일 수 있게 속성과 인라인 스타일 병합 처리
+                if (numW > 0 && !isNaN(numW)) {
+                    img.setAttribute('width', numW);
+                    img.style.width = numW + 'px';
+                }
+                if (numH > 0 && !isNaN(numH)) {
+                    img.setAttribute('height', numH);
+                    img.style.height = numH + 'px';
+                }
+            });
+
+            const inputHtml = inputBox.innerHTML;
+            
+            // 입력창에 글자나 이미지가 모두 없는 경우 작동 방지
+            const hasText = inputBox.textContent.trim().length > 0;
+            const hasImage = inputBox.querySelector('img') !== null;
+            if (!hasText && !hasImage) return;
 
             const btn = document.getElementById('processBtn');
             const originalBtnHtml = btn.innerHTML;
             
-            // UI 로딩 표시 (로컬 작업이라 매우 짧음)
+            // 로딩 상태 피드백 구현
             btn.disabled = true;
             btn.innerHTML = '<span class="loader"></span>처리 중...';
 
-            // 처리 시간을 시뮬레이션하기 위해 약간의 딜레이를 줌 (사용자 경험용)
             setTimeout(() => {
                 try {
-                    // 1. 이모티콘 및 특수 기호 제거
-                    // 이모티콘 정규식
-                    let cleaned = input.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F1E0}-\u{1F1FF}\u{200D}\u{FE0F}]/gu, '');
-                    
-                    // 요청하신 기호 제거 (쉼표, #, *, ## 등)
-                    cleaned = cleaned.replace(/[,#*]/g, '');
+                    const temp = document.createElement('div');
+                    temp.innerHTML = inputHtml;
 
-                    // 2. 줄바꿈 교정 및 마침표 추가
-                    const lines = cleaned.split('\n')
-                        .map(line => line.trim())
-                        .filter(line => line !== ""); // 빈 줄 제거
+                    // 1. 이모티콘 및 요청 기호(, # *) 필터링 (HTML 태그 및 이미지 영역은 영향 주지 않음)
+                    cleanTextNodes(temp);
 
-                    const finalLines = lines.map(line => {
-                        // 문장 끝 마침표 확인 및 추가 (끝이 . ! ? ) 가 아닐 경우
-                        if (line.length > 0 && !/[.!?]$/.test(line)) {
-                            return line + ".";
-                        }
-                        return line;
-                    });
-
-                    const finalResult = finalLines.join('\n');
+                    // 2. 줄바꿈 교정 및 마침표 보정
+                    const finalHtml = cleanStructureAndAddPeriods(temp);
 
                     const outputBox = document.getElementById('outputBox');
                     const resultArea = document.getElementById('resultArea');
                     const charCount = document.getElementById('charCount');
 
-                    outputBox.value = finalResult;
-                    charCount.innerText = finalResult.length + "자";
+                    outputBox.innerHTML = finalHtml;
+                    charCount.innerText = outputBox.textContent.length + "자";
                     resultArea.classList.remove('hidden');
                     
                     resultArea.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -187,24 +340,36 @@
             }, 300);
         }
 
+        // 스타일과 이미지 크기를 지닌 서식(HTML) 데이터 복사 기능 적용
         function copyResult() {
             const outputBox = document.getElementById('outputBox');
-            if (!outputBox.value) return;
+            const hasText = outputBox.textContent.trim().length > 0;
+            const hasImage = outputBox.querySelector('img') !== null;
+            if (!hasText && !hasImage) return;
 
-            outputBox.select();
-            outputBox.setSelectionRange(0, 99999);
+            const htmlContent = outputBox.innerHTML;
+            const textContent = outputBox.textContent;
+
+            // HTML 형식을 클립보드에 기록하여 이미지가 크기 그대로 복사되게 지원
+            function listener(e) {
+                e.clipboardData.setData("text/html", htmlContent);
+                e.clipboardData.setData("text/plain", textContent);
+                e.preventDefault();
+            }
 
             try {
+                document.addEventListener("copy", listener);
                 document.execCommand('copy');
-                showToast("복사가 완료되었습니다! ✨");
+                document.removeEventListener("copy", listener);
+                showToast("스타일과 이미지가 유지된 채 복사되었습니다.");
             } catch (err) {
                 console.error('복사 실패:', err);
+                showToast("복사 중 오류가 발생했습니다.");
             }
-            window.getSelection().removeAllRanges();
         }
 
         function clearInput() {
-            document.getElementById('inputBox').value = '';
+            document.getElementById('inputBox').innerHTML = '';
             document.getElementById('resultArea').classList.add('hidden');
         }
 
