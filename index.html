@@ -326,12 +326,13 @@
         }
 
         // 원본의 줄바꿈 구조는 유지하면서, 단락 뒤의 공백과 의미 없는 빈 줄을 완전히 제거하고 줄간격을 최소로 통일하여 텍스트 생성
+        // 파워포인트 및 메모장 호환성을 위해 CRLF(\r\n) 개행을 명시적으로 사용합니다.
         function getCleanPlainText(element) {
             const rawText = element.innerText || element.textContent || "";
             return rawText.split(/\r?\n/)
                 .map(line => line.replace(/^[\s\u00a0\u200B]+|[\s\u00a0\u200B]+$/g, '')) // 단락 앞뒤 모든 공백 및 특수 공백 제거
                 .filter(line => line.length > 0) // 내용 없는 빈 줄 완전히 제거
-                .join('\n'); // 단일 줄바꿈(\n)으로 통일하여 줄간격 최소화
+                .join('\r\n'); // Windows 표준 줄바꿈(\r\n)으로 통일하여 파워포인트 및 메모장 모두 완벽 호환
         }
 
         // 로컬 정제 핵심 함수
@@ -421,7 +422,36 @@
             const hasImage = outputBox.querySelector('img') !== null;
             if (!hasText && !hasImage) return;
 
-            const htmlContent = outputBox.innerHTML;
+            // 임시 에디터를 생성하여 복사용 HTML 구조 클리닝 필터 적용
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = outputBox.innerHTML;
+
+            // 1. PPT/워드에서 극단적으로 글자 크기가 깨지는 H1~H6 태그를 div 표준태그 + strong(굵게)으로 안전하게 매핑합니다.
+            const headings = tempDiv.querySelectorAll('h1, h2, h3, h4, h5, h6');
+            headings.forEach(h => {
+                const div = document.createElement('div');
+                div.innerHTML = `<strong>${h.innerHTML}</strong>`;
+                if (h.getAttribute('style')) {
+                    div.setAttribute('style', h.getAttribute('style'));
+                }
+                h.parentNode.replaceChild(div, h);
+            });
+
+            // 2. 개별 태그에 묻어있는 font-size 스타일 및 size 어트리뷰트, line-height들을 지워내어 PPT가 슬라이드 마스터 본문 크기를 온전히 승계하도록 유도합니다.
+            const allElements = tempDiv.querySelectorAll('*');
+            allElements.forEach(el => {
+                if (el.style.fontSize) {
+                    el.style.fontSize = '';
+                }
+                if (el.hasAttribute('size')) {
+                    el.removeAttribute('size');
+                }
+                if (el.style.lineHeight) {
+                    el.style.lineHeight = '';
+                }
+            });
+
+            const htmlContent = tempDiv.innerHTML;
             const textContent = getCleanPlainText(outputBox); // 가공된 텍스트와 동기화 적용
 
             // HTML 형식을 유지하면서도, 일반 텍스트 데이터도 동시에 저장하도록 클립보드에 기록합니다.
