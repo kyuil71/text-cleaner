@@ -47,6 +47,20 @@
             vertical-align: middle;
         }
 
+        /* 전체 문장 및 내부에 들어오는 모든 블록 요소의 줄간격을 최소화하고 여백을 완전히 제거 */
+        #inputBox, #outputBox {
+            line-height: 1.15 !important;
+        }
+
+        #inputBox p, #inputBox div, #inputBox h1, #inputBox h2, #inputBox h3, #inputBox h4, #inputBox h5, #inputBox h6,
+        #outputBox p, #outputBox div, #outputBox h1, #outputBox h2, #outputBox h3, #outputBox h4, #outputBox h5, #outputBox h6 {
+            margin-top: 0 !important;
+            margin-bottom: 0 !important;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+            line-height: 1.15 !important;
+        }
+
         /* 로딩 효과 (매우 빠르게 처리됨) */
         .loader {
             border: 2px solid #f3f3f3;
@@ -123,22 +137,31 @@
                         <label class="text-sm font-semibold text-slate-700">정제된 결과</label>
                         <span id="charCount" class="text-xs text-slate-400">0자</span>
                     </div>
-                    <div class="relative group">
+                    <div class="space-y-3">
                         <!-- 결과를 똑같이 서식 있는 상태로 렌더링 -->
                         <div 
                             id="outputBox" 
                             class="w-full h-48 p-4 bg-blue-50/50 border border-blue-100 rounded-2xl text-slate-800 outline-none overflow-y-auto editor-scroll"
                         ></div>
                         
-                        <button 
-                            onclick="copyResult()"
-                            class="absolute bottom-4 right-4 bg-slate-800 hover:bg-black text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-all shadow-lg flex items-center gap-2 active:scale-95"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                            </svg>
-                            결과 복사하기
-                        </button>
+                        <!-- 복사 버튼 컨테이너 (두 가지 기능 구현) -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <!-- 서식 포함 복사 -->
+                            <button 
+                                onclick="copyFormattedResult()"
+                                class="w-full py-3.5 px-5 bg-slate-800 hover:bg-black text-white rounded-xl text-sm font-semibold transition-all shadow-lg text-center active:scale-95"
+                            >
+                                서식·이미지 복사
+                            </button>
+
+                            <!-- 순수 텍스트만 복사 -->
+                            <button 
+                                onclick="copyPlainTextOnly()"
+                                class="w-full py-3.5 px-5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80 rounded-xl text-sm font-semibold transition-all text-center active:scale-95"
+                            >
+                                텍스트만 복사
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -184,21 +207,25 @@
             }
         }
 
-        // 가장 마지막 텍스트 노드를 찾아주는 헬퍼 함수
+        // 가장 마지막 유효한 텍스트 노드를 찾아주는 헬퍼 함수
         function getLastTextNode(node) {
             if (node.nodeType === Node.TEXT_NODE) {
-                return node;
+                // 공백 문자나 특수 공백이 아닌 실제 문자가 포함되어 있는지 체크
+                const text = node.nodeValue.replace(/[\s\u00a0\u200B]/g, '');
+                if (text.length > 0) {
+                    return node;
+                }
             }
             for (let i = node.childNodes.length - 1; i >= 0; i--) {
                 const found = getLastTextNode(node.childNodes[i]);
-                if (found && found.nodeValue.trim().length > 0) {
+                if (found) {
                     return found;
                 }
             }
             return null;
         }
 
-        // 마침표 누락 시 보완 기능 (이미지 태그 뒤에 마침표가 어색하게 들어가지 않도록 텍스트 노드를 타겟팅)
+        // 마침표 누락 시 보완 기능 (실제 의미가 있는 글자 뒤에만 정교하게 추가)
         function ensurePeriod(element) {
             const lastTextNode = getLastTextNode(element);
             if (lastTextNode) {
@@ -210,16 +237,52 @@
             }
         }
 
+        // 의미 없는 빈 줄바꿈 태그(<br>) 및 빈 inline 요소들 정리 함수
+        function removeTrailingBRs(element) {
+            while (element.lastChild) {
+                const last = element.lastChild;
+                if (last.nodeType === Node.ELEMENT_NODE && last.tagName === 'BR') {
+                    element.removeChild(last);
+                } else if (last.nodeType === Node.TEXT_NODE && last.nodeValue.replace(/[\s\u00a0\u200B]/g, '').length === 0) {
+                    element.removeChild(last);
+                } else {
+                    break;
+                }
+            }
+        }
+
+        // 실질적인 내용(텍스트/이미지)이 존재하지 않는 찌꺼기 요소를 완전 제거하는 함수
+        function removeEmptyElements(element) {
+            const children = Array.from(element.childNodes);
+            children.forEach(child => {
+                if (child.nodeType === Node.ELEMENT_NODE) {
+                    removeEmptyElements(child);
+                    
+                    const hasImg = child.querySelector('img') !== null || child.tagName === 'IMG';
+                    const hasBr = child.querySelector('br') !== null || child.tagName === 'BR';
+                    const cleanText = child.textContent.replace(/[\s\u00a0\u200B]/g, '');
+                    
+                    if (!hasImg && !hasBr && cleanText.length === 0) {
+                        element.removeChild(child);
+                    }
+                }
+            });
+        }
+
         // 줄바꿈 구조 정리 및 종결 어미 마침표(.) 추가
         function cleanStructureAndAddPeriods(tempDiv) {
+            // 내용이 비어있는 감싸기용 자식 요소 전면 클린업
+            removeEmptyElements(tempDiv);
+
             const resultDiv = document.createElement('div');
             let currentParagraph = null;
 
             function flushCurrentParagraph() {
                 if (currentParagraph) {
-                    const text = currentParagraph.textContent.trim();
+                    removeTrailingBRs(currentParagraph);
+                    const text = currentParagraph.textContent.replace(/[\s\u00a0\u200B]/g, '');
                     const hasImage = currentParagraph.querySelector('img') !== null;
-                    // 텍스트나 이미지가 있는 경우에만 처리 진행
+                    
                     if (text.length > 0 || hasImage) {
                         ensurePeriod(currentParagraph);
                         resultDiv.appendChild(currentParagraph);
@@ -237,10 +300,13 @@
                 if (isBlock) {
                     flushCurrentParagraph();
                     
-                    const blockText = node.textContent.trim();
-                    const hasImage = node.querySelector('img') !== null;
-                    if (blockText.length > 0 || hasImage) {
-                        const clonedBlock = node.cloneNode(true);
+                    const clonedBlock = node.cloneNode(true);
+                    removeTrailingBRs(clonedBlock);
+                    
+                    const text = clonedBlock.textContent.replace(/[\s\u00a0\u200B]/g, '');
+                    const hasImage = clonedBlock.querySelector('img') !== null;
+                    
+                    if (text.length > 0 || hasImage) {
                         ensurePeriod(clonedBlock);
                         resultDiv.appendChild(clonedBlock);
                     }
@@ -250,7 +316,6 @@
                     // 인라인 태그들(text, b, strong, span, em, img 등)은 하나의 문맥 문장으로 누적 병합
                     if (!currentParagraph) {
                         currentParagraph = document.createElement('div');
-                        currentParagraph.className = "mb-2"; // 각 문단 간격 조정
                     }
                     currentParagraph.appendChild(node.cloneNode(true));
                 }
@@ -258,6 +323,15 @@
             
             flushCurrentParagraph();
             return resultDiv.innerHTML;
+        }
+
+        // 원본의 줄바꿈 구조는 유지하면서, 단락 뒤의 공백과 의미 없는 빈 줄을 완전히 제거하고 줄간격을 최소로 통일하여 텍스트 생성
+        function getCleanPlainText(element) {
+            const rawText = element.innerText || element.textContent || "";
+            return rawText.split(/\r?\n/)
+                .map(line => line.replace(/^[\s\u00a0\u200B]+|[\s\u00a0\u200B]+$/g, '')) // 단락 앞뒤 모든 공백 및 특수 공백 제거
+                .filter(line => line.length > 0) // 내용 없는 빈 줄 완전히 제거
+                .join('\n'); // 단일 줄바꿈(\n)으로 통일하여 줄간격 최소화
         }
 
         // 로컬 정제 핵심 함수
@@ -340,17 +414,17 @@
             }, 300);
         }
 
-        // 스타일과 이미지 크기를 지닌 서식(HTML) 데이터 복사 기능 적용
-        function copyResult() {
+        // 기능 1: 스타일과 이미지 크기를 지닌 서식(HTML) 데이터 복사 적용
+        function copyFormattedResult() {
             const outputBox = document.getElementById('outputBox');
             const hasText = outputBox.textContent.trim().length > 0;
             const hasImage = outputBox.querySelector('img') !== null;
             if (!hasText && !hasImage) return;
 
             const htmlContent = outputBox.innerHTML;
-            const textContent = outputBox.textContent;
+            const textContent = getCleanPlainText(outputBox); // 가공된 텍스트와 동기화 적용
 
-            // HTML 형식을 클립보드에 기록하여 이미지가 크기 그대로 복사되게 지원
+            // HTML 형식을 유지하면서도, 일반 텍스트 데이터도 동시에 저장하도록 클립보드에 기록합니다.
             function listener(e) {
                 e.clipboardData.setData("text/html", htmlContent);
                 e.clipboardData.setData("text/plain", textContent);
@@ -362,6 +436,30 @@
                 document.execCommand('copy');
                 document.removeEventListener("copy", listener);
                 showToast("스타일과 이미지가 유지된 채 복사되었습니다.");
+            } catch (err) {
+                console.error('복사 실패:', err);
+                showToast("복사 중 오류가 발생했습니다.");
+            }
+        }
+
+        // 기능 2: 모든 서식을 무시하고 오직 순수 텍스트만 원본 줄바꿈 그대로 클립보드에 복사 적용 (내용 없는 줄만 스킵)
+        function copyPlainTextOnly() {
+            const outputBox = document.getElementById('outputBox');
+            if (!outputBox.textContent.trim()) return;
+
+            const textContent = getCleanPlainText(outputBox);
+
+            // 오직 text/plain 타입으로만 데이터를 기록해 모든 서식 요소와 이미지를 완전 차단합니다.
+            function listener(e) {
+                e.clipboardData.setData("text/plain", textContent);
+                e.preventDefault();
+            }
+
+            try {
+                document.addEventListener("copy", listener);
+                document.execCommand('copy');
+                document.removeEventListener("copy", listener);
+                showToast("순수 텍스트만 복사되었습니다.");
             } catch (err) {
                 console.error('복사 실패:', err);
                 showToast("복사 중 오류가 발생했습니다.");
