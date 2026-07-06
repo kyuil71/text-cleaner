@@ -192,8 +192,8 @@
                 // 1. 모든 종류의 이모티콘 삭제 정규식
                 text = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F1E0}-\u{1F1FF}\u{200D}\u{FE0F}]/gu, '');
                 
-                // 2. 요청 기호 제거 (쉼표, #, * 단, markdown 문법 별표가 아닌 일반 별표 정제 대상 유지)
-                text = text.replace(/[,#*]/g, '');
+                // 2. 요청 기호 제거 (# 및 *만 제거, 쉼표[,]는 본연의 기본 특성이므로 완전 보존!)
+                text = text.replace(/[#*]/g, '');
                 node.nodeValue = text;
             } else if (node.nodeType === Node.ELEMENT_NODE) {
                 // IMG 태그나 다른 중요 요소들은 자식 탐색을 스킵하거나 그대로 둡니다.
