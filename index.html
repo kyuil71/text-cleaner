@@ -185,15 +185,27 @@
             document.getElementById('inputBox').focus();
         }
 
+        // 이모티콘 판별 정규식 (재사용을 위해 상수로 분리)
+        const EMOJI_REGEX = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1FA70}-\u{1FAFF}\u{1F1E0}-\u{1F1FF}\u{200D}\u{FE0F}]/gu;
+
         // HTML 내부의 텍스트 노드들을 순회하며 필요한 요소들만 지우는 유틸리티
         function cleanTextNodes(node) {
             if (node.nodeType === Node.TEXT_NODE) {
                 let text = node.nodeValue;
-                // 1. 모든 종류의 이모티콘 삭제 정규식
-                text = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F1E0}-\u{1F1FF}\u{200D}\u{FE0F}]/gu, '');
+                const original = text;
+
+                // 1. 모든 종류의 이모티콘 삭제 (쉼표 등 일반 문장부호는 절대 건드리지 않음)
+                text = text.replace(EMOJI_REGEX, '');
                 
                 // 2. 요청 기호 제거 (# 및 *만 제거, 쉼표[,]는 본연의 기본 특성이므로 완전 보존!)
                 text = text.replace(/[#*]/g, '');
+
+                // [버그 수정] 이모티콘·기호가 지워진 "그 자리"에만 생긴 이중 공백을 한 칸으로 정리합니다.
+                // 아무것도 지워지지 않은 텍스트는 원본 띄어쓰기를 100% 그대로 유지합니다.
+                if (text !== original) {
+                    text = text.replace(/ {2,}/g, ' ');
+                }
+
                 node.nodeValue = text;
             } else if (node.nodeType === Node.ELEMENT_NODE) {
                 // IMG 태그나 다른 중요 요소들은 자식 탐색을 스킵하거나 그대로 둡니다.
@@ -207,33 +219,57 @@
             }
         }
 
-        // 가장 마지막 유효한 텍스트 노드를 찾아주는 헬퍼 함수
-        function getLastTextNode(node) {
+        // [버그 수정] 문단의 "실제 마지막 내용물"(텍스트 또는 이미지)을 찾아주는 헬퍼 함수
+        // 기존에는 텍스트 노드만 찾아서, 이미지로 끝나는 문장인데도 이미지 앞의 글자에
+        // 마침표를 잘못 끼워 넣는 문제가 있었습니다.
+        function getLastMeaningfulNode(node) {
             if (node.nodeType === Node.TEXT_NODE) {
                 // 공백 문자나 특수 공백이 아닌 실제 문자가 포함되어 있는지 체크
                 const text = node.nodeValue.replace(/[\s\u00a0\u200B]/g, '');
                 if (text.length > 0) {
                     return node;
                 }
+                return null;
             }
-            for (let i = node.childNodes.length - 1; i >= 0; i--) {
-                const found = getLastTextNode(node.childNodes[i]);
-                if (found) {
-                    return found;
+            if (node.nodeType === Node.ELEMENT_NODE) {
+                if (node.tagName === 'IMG') {
+                    return node; // 이미지도 유효한 마지막 내용물로 취급
+                }
+                for (let i = node.childNodes.length - 1; i >= 0; i--) {
+                    const found = getLastMeaningfulNode(node.childNodes[i]);
+                    if (found) {
+                        return found;
+                    }
                 }
             }
             return null;
         }
 
-        // 마침표 누락 시 보완 기능 (실제 의미가 있는 글자 뒤에만 정교하게 추가)
+        // 마침표 누락 시 보완 기능
+        // [버그 수정 1] 기존에는 마지막 글자가 . ! ? 가 아니면 무조건 마침표를 붙여서
+        //   "~했고," 가 "~했고,." 처럼 쉼표 뒤에 마침표가 붙는 문제가 있었습니다.
+        //   → 이제 마지막 글자가 '글자(한글/영문/숫자 등)'일 때만 마침표를 추가하고,
+        //     쉼표·따옴표·괄호 등 모든 문장부호로 끝나는 문장은 원본 그대로 둡니다.
+        // [버그 수정 2] 기존에는 마침표 뒤에 불필요한 공백(' ')을 강제로 추가했습니다. → 제거.
+        // [버그 수정 3] 이미지로 끝나는 문단에는 마침표를 추가하지 않습니다.
         function ensurePeriod(element) {
-            const lastTextNode = getLastTextNode(element);
-            if (lastTextNode) {
-                const text = lastTextNode.nodeValue.trimRight();
-                if (text.length > 0 && !/[.!?]$/.test(text)) {
-                    // 공백을 보존하며 문장의 끝 부분 텍스트 노드에 직접 마침표를 추가합니다.
-                    lastTextNode.nodeValue = lastTextNode.nodeValue.replace(/\s*$/, '.') + ' ';
-                }
+            const lastNode = getLastMeaningfulNode(element);
+
+            // 마지막 내용물이 없거나, 이미지로 끝나는 경우에는 마침표를 추가하지 않음
+            if (!lastNode || lastNode.nodeType !== Node.TEXT_NODE) return;
+
+            // 노드 끝의 불필요한 공백만 정리 (문장 중간 띄어쓰기는 손대지 않음)
+            const trimmed = lastNode.nodeValue.replace(/[\s\u00a0\u200B]+$/, '');
+            if (trimmed.length === 0) return;
+
+            const lastChar = trimmed.charAt(trimmed.length - 1);
+
+            // 마지막 글자가 순수한 '글자 또는 숫자'일 때만 마침표를 붙입니다.
+            // (쉼표, 물음표, 느낌표, 말줄임표, 따옴표, 괄호 등으로 끝나면 원본 보존)
+            if (/[\p{L}\p{N}]/u.test(lastChar)) {
+                lastNode.nodeValue = trimmed + '.';
+            } else {
+                lastNode.nodeValue = trimmed;
             }
         }
 
@@ -251,7 +287,14 @@
             }
         }
 
-        // 실질적인 내용(텍스트/이미지)이 존재하지 않는 찌꺼기 요소를 완전 제거하는 함수
+        // 실질적인 내용이 존재하지 않는 찌꺼기 요소를 제거하는 함수
+        // [핵심 버그 수정] 기존에는 "공백만 들어있는 요소"까지 전부 삭제했습니다.
+        //   그런데 워드/웹에서 붙여넣은 글은 단어 사이의 띄어쓰기가 <span> </span> 처럼
+        //   태그로 감싸져 있는 경우가 매우 많아서, 이 공백 태그가 삭제되면
+        //   "안녕 하세요" → "안녕하세요" 처럼 단어가 붙어버리는 문제가 발생했습니다.
+        //   → 이제 일반 공백( )과 특수 공백(&nbsp;)은 '의미 있는 내용'으로 취급하여 보존하고,
+        //     눈에 보이지 않는 제로폭 문자만 없는 것으로 간주해 진짜 빈 요소만 제거합니다.
+        //   (공백만으로 이루어진 '빈 줄' 자체는 이후 단계의 줄 단위 필터에서 안전하게 제거됩니다.)
         function removeEmptyElements(element) {
             const children = Array.from(element.childNodes);
             children.forEach(child => {
@@ -260,9 +303,10 @@
                     
                     const hasImg = child.querySelector('img') !== null || child.tagName === 'IMG';
                     const hasBr = child.querySelector('br') !== null || child.tagName === 'BR';
-                    const cleanText = child.textContent.replace(/[\s\u00a0\u200B]/g, '');
+                    // 제로폭 문자만 제거하고 판별 → 띄어쓰기(공백, &nbsp;)는 내용으로 인정하여 보존
+                    const contentText = child.textContent.replace(/[\u200B\uFEFF]/g, '');
                     
-                    if (!hasImg && !hasBr && cleanText.length === 0) {
+                    if (!hasImg && !hasBr && contentText.length === 0) {
                         element.removeChild(child);
                     }
                 }
@@ -271,7 +315,7 @@
 
         // 줄바꿈 구조 정리 및 종결 어미 마침표(.) 추가
         function cleanStructureAndAddPeriods(tempDiv) {
-            // 내용이 비어있는 감싸기용 자식 요소 전면 클린업
+            // 내용이 완전히 비어있는 감싸기용 자식 요소 클린업 (공백은 보존)
             removeEmptyElements(tempDiv);
 
             const resultDiv = document.createElement('div');
@@ -325,13 +369,18 @@
             return resultDiv.innerHTML;
         }
 
-        // 원본의 줄바꿈 구조는 유지하면서, 단락 뒤의 공백과 의미 없는 빈 줄을 완전히 제거하고 줄간격을 최소로 통일하여 텍스트 생성
+        // 원본의 줄바꿈 구조는 유지하면서, 단락 뒤 공백과 의미 없는 빈 줄만 제거하여 텍스트 생성
+        // [버그 수정] 기존에는 각 줄의 '앞쪽' 공백까지 전부 제거해서 의도적인 들여쓰기가
+        //   사라지는 문제가 있었습니다. → 이제 줄 끝의 공백만 정리하고 줄 앞 띄어쓰기는 보존합니다.
         // 파워포인트 및 메모장 호환성을 위해 CRLF(\r\n) 개행을 명시적으로 사용합니다.
         function getCleanPlainText(element) {
             const rawText = element.innerText || element.textContent || "";
             return rawText.split(/\r?\n/)
-                .map(line => line.replace(/^[\s\u00a0\u200B]+|[\s\u00a0\u200B]+$/g, '')) // 단락 앞뒤 모든 공백 및 특수 공백 제거
-                .filter(line => line.length > 0) // 내용 없는 빈 줄 완전히 제거
+                .map(line => line
+                    .replace(/[\u200B\uFEFF]/g, '')      // 눈에 보이지 않는 제로폭 문자만 제거
+                    .replace(/\u00a0/g, ' ')             // 특수 공백(&nbsp;)은 일반 공백으로 호환 변환
+                    .replace(/[ \t]+$/, ''))             // 줄 '끝'의 공백만 제거 (앞 들여쓰기는 보존)
+                .filter(line => line.trim().length > 0)  // 내용 없는 빈 줄 완전히 제거
                 .join('\r\n'); // Windows 표준 줄바꿈(\r\n)으로 통일하여 파워포인트 및 메모장 모두 완벽 호환
         }
 
@@ -389,7 +438,7 @@
                     const temp = document.createElement('div');
                     temp.innerHTML = inputHtml;
 
-                    // 1. 이모티콘 및 요청 기호(, # *) 필터링 (HTML 태그 및 이미지 영역은 영향 주지 않음)
+                    // 1. 이모티콘 및 요청 기호(# *) 필터링 (쉼표와 띄어쓰기, HTML 태그, 이미지 영역은 완전 보존)
                     cleanTextNodes(temp);
 
                     // 2. 줄바꿈 교정 및 마침표 보정
@@ -430,7 +479,9 @@
             const headings = tempDiv.querySelectorAll('h1, h2, h3, h4, h5, h6');
             headings.forEach(h => {
                 const div = document.createElement('div');
-                div.innerHTML = `<strong>${h.innerHTML}</strong>`;
+                const strong = document.createElement('strong');
+                strong.innerHTML = h.innerHTML;
+                div.appendChild(strong);
                 if (h.getAttribute('style')) {
                     div.setAttribute('style', h.getAttribute('style'));
                 }
