@@ -61,7 +61,7 @@
             line-height: 1.15 !important;
         }
 
-        /* 로딩 효과 (매우 빠르게 처리됨) */
+        /* 로딩 효과 */
         .loader {
             border: 2px solid #f3f3f3;
             border-top: 2px solid #ffffff;
@@ -148,6 +148,7 @@
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <!-- 서식 포함 복사 -->
                             <button 
+                                id="copyFormattedBtn"
                                 onclick="copyFormattedResult()"
                                 class="w-full py-3.5 px-5 bg-slate-800 hover:bg-black text-white rounded-xl text-sm font-semibold transition-all shadow-lg text-center active:scale-95"
                             >
@@ -188,6 +189,89 @@
         // 이모티콘 판별 정규식 (재사용을 위해 상수로 분리)
         const EMOJI_REGEX = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1FA70}-\u{1FAFF}\u{1F1E0}-\u{1F1FF}\u{200D}\u{FE0F}]/gu;
 
+        /* ==========================================================================
+           [핵심 버그 수정] 워드/파워포인트에 붙여넣기 시 이미지가 하얗게(빈 칸으로) 나오는 문제
+           --------------------------------------------------------------------------
+           ▶ 원인:
+             웹페이지나 다른 프로그램에서 복사해 붙여넣은 이미지의 주소(src)는 대부분
+             "blob:..." (브라우저 임시 메모리 주소) 이거나 "https://..." (외부 웹 주소)입니다.
+             - blob: 주소는 그 브라우저 탭 안에서만 유효하기 때문에, 워드/PPT는
+               해당 주소에서 이미지를 절대 읽어올 수 없어 흰색 빈 상자만 표시됩니다.
+             - https: 외부 주소도 로그인/보안 정책 등으로 워드가 내려받지 못하면
+               똑같이 빈 이미지가 됩니다.
+           ▶ 해결:
+             모든 이미지를 복사 전에 Base64 데이터 URI(data:image/png;base64,...)로
+             변환하여, 이미지의 "실제 픽셀 데이터 자체"를 HTML 안에 완전히 심어 넣습니다.
+             이렇게 하면 워드/PPT가 외부에 접속할 필요 없이 클립보드 안의 데이터만으로
+             이미지를 100% 복원할 수 있습니다.
+           ========================================================================== */
+
+        // Blob(이진 데이터) → Base64 데이터 URI 문자열 변환
+        function blobToDataURL(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = () => reject(new Error('FileReader 실패'));
+                reader.readAsDataURL(blob);
+            });
+        }
+
+        // 이미지 src 하나를 Base64 데이터 URI로 변환 (2단계 안전장치)
+        async function srcToDataURL(src, imgEl) {
+            // [1단계] fetch로 원본 파일을 직접 내려받아 변환 (blob: 주소·같은 출처 이미지에 가장 확실)
+            //         → 원본 포맷(png/jpg/gif)과 화질이 그대로 유지됩니다.
+            try {
+                const resp = await fetch(src);
+                if (resp.ok) {
+                    const blob = await resp.blob();
+                    if (blob && blob.size > 0) {
+                        const dataUrl = await blobToDataURL(blob);
+                        if (dataUrl && dataUrl.startsWith('data:')) return dataUrl;
+                    }
+                }
+            } catch (e) {
+                // fetch가 막히면(외부 도메인 보안 정책 등) 2단계로 넘어갑니다.
+            }
+
+            // [2단계] 이미지를 캔버스에 다시 그려서 PNG로 추출 (외부 이미지 대비 예비 수단)
+            return new Promise((resolve) => {
+                const image = new Image();
+                image.crossOrigin = 'anonymous';
+                image.onload = () => {
+                    try {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = image.naturalWidth || imgEl.width || 300;
+                        canvas.height = image.naturalHeight || imgEl.height || 300;
+                        canvas.getContext('2d').drawImage(image, 0, 0);
+                        resolve(canvas.toDataURL('image/png'));
+                    } catch (err) {
+                        // 보안 정책(CORS)으로 캔버스 추출까지 막힌 경우 → 원본 유지
+                        resolve(null);
+                    }
+                };
+                image.onerror = () => resolve(null);
+                image.src = src;
+            });
+        }
+
+        // 컨테이너 안의 모든 이미지를 Base64로 임베드 (이미 data:인 이미지는 건너뜀)
+        // 반환값: 변환에 실패한 이미지 개수 (사용자 안내용)
+        async function embedAllImages(container) {
+            const imgs = container.querySelectorAll('img');
+            let failed = 0;
+            for (const img of imgs) {
+                const src = img.getAttribute('src') || '';
+                if (!src || src.startsWith('data:')) continue; // 이미 완전히 내장된 이미지
+                const dataUrl = await srcToDataURL(src, img);
+                if (dataUrl) {
+                    img.setAttribute('src', dataUrl);
+                } else {
+                    failed++;
+                }
+            }
+            return failed;
+        }
+
         // HTML 내부의 텍스트 노드들을 순회하며 필요한 요소들만 지우는 유틸리티
         function cleanTextNodes(node) {
             if (node.nodeType === Node.TEXT_NODE) {
@@ -200,31 +284,25 @@
                 // 2. 요청 기호 제거 (# 및 *만 제거, 쉼표[,]는 본연의 기본 특성이므로 완전 보존!)
                 text = text.replace(/[#*]/g, '');
 
-                // [버그 수정] 이모티콘·기호가 지워진 "그 자리"에만 생긴 이중 공백을 한 칸으로 정리합니다.
-                // 아무것도 지워지지 않은 텍스트는 원본 띄어쓰기를 100% 그대로 유지합니다.
+                // 이모티콘·기호가 지워진 "그 자리"에만 생긴 이중 공백을 한 칸으로 정리합니다.
                 if (text !== original) {
                     text = text.replace(/ {2,}/g, ' ');
                 }
 
                 node.nodeValue = text;
             } else if (node.nodeType === Node.ELEMENT_NODE) {
-                // IMG 태그나 다른 중요 요소들은 자식 탐색을 스킵하거나 그대로 둡니다.
                 if (node.tagName === 'IMG') {
                     return; // 이미지는 자체로 완전하므로 가공을 건너뜁니다.
                 }
-                // 자식 노드들을 계속 탐색
                 for (let i = 0; i < node.childNodes.length; i++) {
                     cleanTextNodes(node.childNodes[i]);
                 }
             }
         }
 
-        // [버그 수정] 문단의 "실제 마지막 내용물"(텍스트 또는 이미지)을 찾아주는 헬퍼 함수
-        // 기존에는 텍스트 노드만 찾아서, 이미지로 끝나는 문장인데도 이미지 앞의 글자에
-        // 마침표를 잘못 끼워 넣는 문제가 있었습니다.
+        // 문단의 "실제 마지막 내용물"(텍스트 또는 이미지)을 찾아주는 헬퍼 함수
         function getLastMeaningfulNode(node) {
             if (node.nodeType === Node.TEXT_NODE) {
-                // 공백 문자나 특수 공백이 아닌 실제 문자가 포함되어 있는지 체크
                 const text = node.nodeValue.replace(/[\s\u00a0\u200B]/g, '');
                 if (text.length > 0) {
                     return node;
@@ -233,7 +311,7 @@
             }
             if (node.nodeType === Node.ELEMENT_NODE) {
                 if (node.tagName === 'IMG') {
-                    return node; // 이미지도 유효한 마지막 내용물로 취급
+                    return node;
                 }
                 for (let i = node.childNodes.length - 1; i >= 0; i--) {
                     const found = getLastMeaningfulNode(node.childNodes[i]);
@@ -245,27 +323,15 @@
             return null;
         }
 
-        // 마침표 누락 시 보완 기능
-        // [버그 수정 1] 기존에는 마지막 글자가 . ! ? 가 아니면 무조건 마침표를 붙여서
-        //   "~했고," 가 "~했고,." 처럼 쉼표 뒤에 마침표가 붙는 문제가 있었습니다.
-        //   → 이제 마지막 글자가 '글자(한글/영문/숫자 등)'일 때만 마침표를 추가하고,
-        //     쉼표·따옴표·괄호 등 모든 문장부호로 끝나는 문장은 원본 그대로 둡니다.
-        // [버그 수정 2] 기존에는 마침표 뒤에 불필요한 공백(' ')을 강제로 추가했습니다. → 제거.
-        // [버그 수정 3] 이미지로 끝나는 문단에는 마침표를 추가하지 않습니다.
+        // 마침표 누락 시 보완 기능 (글자/숫자로 끝날 때만 마침표 추가, 이미지·문장부호로 끝나면 원본 보존)
         function ensurePeriod(element) {
             const lastNode = getLastMeaningfulNode(element);
-
-            // 마지막 내용물이 없거나, 이미지로 끝나는 경우에는 마침표를 추가하지 않음
             if (!lastNode || lastNode.nodeType !== Node.TEXT_NODE) return;
 
-            // 노드 끝의 불필요한 공백만 정리 (문장 중간 띄어쓰기는 손대지 않음)
             const trimmed = lastNode.nodeValue.replace(/[\s\u00a0\u200B]+$/, '');
             if (trimmed.length === 0) return;
 
             const lastChar = trimmed.charAt(trimmed.length - 1);
-
-            // 마지막 글자가 순수한 '글자 또는 숫자'일 때만 마침표를 붙입니다.
-            // (쉼표, 물음표, 느낌표, 말줄임표, 따옴표, 괄호 등으로 끝나면 원본 보존)
             if (/[\p{L}\p{N}]/u.test(lastChar)) {
                 lastNode.nodeValue = trimmed + '.';
             } else {
@@ -287,14 +353,7 @@
             }
         }
 
-        // 실질적인 내용이 존재하지 않는 찌꺼기 요소를 제거하는 함수
-        // [핵심 버그 수정] 기존에는 "공백만 들어있는 요소"까지 전부 삭제했습니다.
-        //   그런데 워드/웹에서 붙여넣은 글은 단어 사이의 띄어쓰기가 <span> </span> 처럼
-        //   태그로 감싸져 있는 경우가 매우 많아서, 이 공백 태그가 삭제되면
-        //   "안녕 하세요" → "안녕하세요" 처럼 단어가 붙어버리는 문제가 발생했습니다.
-        //   → 이제 일반 공백( )과 특수 공백(&nbsp;)은 '의미 있는 내용'으로 취급하여 보존하고,
-        //     눈에 보이지 않는 제로폭 문자만 없는 것으로 간주해 진짜 빈 요소만 제거합니다.
-        //   (공백만으로 이루어진 '빈 줄' 자체는 이후 단계의 줄 단위 필터에서 안전하게 제거됩니다.)
+        // 실질적인 내용이 존재하지 않는 찌꺼기 요소를 제거하는 함수 (공백 태그는 내용으로 인정하여 보존)
         function removeEmptyElements(element) {
             const children = Array.from(element.childNodes);
             children.forEach(child => {
@@ -303,7 +362,6 @@
                     
                     const hasImg = child.querySelector('img') !== null || child.tagName === 'IMG';
                     const hasBr = child.querySelector('br') !== null || child.tagName === 'BR';
-                    // 제로폭 문자만 제거하고 판별 → 띄어쓰기(공백, &nbsp;)는 내용으로 인정하여 보존
                     const contentText = child.textContent.replace(/[\u200B\uFEFF]/g, '');
                     
                     if (!hasImg && !hasBr && contentText.length === 0) {
@@ -315,7 +373,6 @@
 
         // 줄바꿈 구조 정리 및 종결 어미 마침표(.) 추가
         function cleanStructureAndAddPeriods(tempDiv) {
-            // 내용이 완전히 비어있는 감싸기용 자식 요소 클린업 (공백은 보존)
             removeEmptyElements(tempDiv);
 
             const resultDiv = document.createElement('div');
@@ -335,7 +392,6 @@
                 }
             }
 
-            // 최상위 노드들을 분석하여 줄바꿈 및 문장 끝 체크
             Array.from(tempDiv.childNodes).forEach(node => {
                 const isBlock = node.nodeType === Node.ELEMENT_NODE && 
                                 ['DIV', 'P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI'].includes(node.tagName);
@@ -357,7 +413,6 @@
                 } else if (isBr) {
                     flushCurrentParagraph();
                 } else {
-                    // 인라인 태그들(text, b, strong, span, em, img 등)은 하나의 문맥 문장으로 누적 병합
                     if (!currentParagraph) {
                         currentParagraph = document.createElement('div');
                     }
@@ -369,28 +424,21 @@
             return resultDiv.innerHTML;
         }
 
-        // 원본의 줄바꿈 구조는 유지하면서, 단락 뒤 공백과 의미 없는 빈 줄만 제거하여 텍스트 생성
-        // [버그 수정] 기존에는 각 줄의 '앞쪽' 공백까지 전부 제거해서 의도적인 들여쓰기가
-        //   사라지는 문제가 있었습니다. → 이제 줄 끝의 공백만 정리하고 줄 앞 띄어쓰기는 보존합니다.
-        // 파워포인트 및 메모장 호환성을 위해 CRLF(\r\n) 개행을 명시적으로 사용합니다.
+        // 원본의 줄바꿈 구조는 유지하면서 순수 텍스트 생성 (줄 앞 들여쓰기 보존, 빈 줄만 제거)
         function getCleanPlainText(element) {
             const rawText = element.innerText || element.textContent || "";
             return rawText.split(/\r?\n/)
                 .map(line => line
-                    .replace(/[\u200B\uFEFF]/g, '')      // 눈에 보이지 않는 제로폭 문자만 제거
-                    .replace(/\u00a0/g, ' ')             // 특수 공백(&nbsp;)은 일반 공백으로 호환 변환
-                    .replace(/[ \t]+$/, ''))             // 줄 '끝'의 공백만 제거 (앞 들여쓰기는 보존)
-                .filter(line => line.trim().length > 0)  // 내용 없는 빈 줄 완전히 제거
-                .join('\r\n'); // Windows 표준 줄바꿈(\r\n)으로 통일하여 파워포인트 및 메모장 모두 완벽 호환
+                    .replace(/[\u200B\uFEFF]/g, '')
+                    .replace(/\u00a0/g, ' ')
+                    .replace(/[ \t]+$/, ''))
+                .filter(line => line.trim().length > 0)
+                .join('\r\n');
         }
 
-        // 로컬 정제 핵심 함수
-        function processTextLocal() {
-            const inputBox = document.getElementById('inputBox');
-            
-            // 워드 등 외부 편집기가 이미지 크기를 정상적으로 인지할 수 있도록, 
-            // 실제 브라우저 상에 렌더링되거나 정의된 크기(너비/높이)를 물리적인 HTML5 속성과 절대 인라인 CSS 스타일로 직접 주입합니다.
-            const liveImages = inputBox.querySelectorAll('img');
+        // 이미지 크기(너비/높이)를 HTML 속성 + 인라인 스타일로 고정하는 함수
+        function lockImageSizes(container) {
+            const liveImages = container.querySelectorAll('img');
             liveImages.forEach(img => {
                 const computed = window.getComputedStyle(img);
                 const rect = img.getBoundingClientRect();
@@ -408,18 +456,22 @@
                 const numW = parseFloat(w);
                 const numH = parseFloat(h);
                 
-                // 워드가 확실하게 읽어들일 수 있게 속성과 인라인 스타일 병합 처리
                 if (numW > 0 && !isNaN(numW)) {
-                    img.setAttribute('width', numW);
+                    img.setAttribute('width', Math.round(numW));
                     img.style.width = numW + 'px';
                 }
                 if (numH > 0 && !isNaN(numH)) {
-                    img.setAttribute('height', numH);
+                    img.setAttribute('height', Math.round(numH));
                     img.style.height = numH + 'px';
                 }
             });
+        }
 
-            const inputHtml = inputBox.innerHTML;
+        // 로컬 정제 핵심 함수
+        // [수정] 정제 단계에서 미리 모든 이미지를 Base64로 내장(embed)합니다.
+        //        이렇게 하면 복사 시점에는 추가 변환이 필요 없어, 복사가 즉시·안정적으로 동작합니다.
+        async function processTextLocal() {
+            const inputBox = document.getElementById('inputBox');
             
             // 입력창에 글자나 이미지가 모두 없는 경우 작동 방지
             const hasText = inputBox.textContent.trim().length > 0;
@@ -429,53 +481,55 @@
             const btn = document.getElementById('processBtn');
             const originalBtnHtml = btn.innerHTML;
             
-            // 로딩 상태 피드백 구현
             btn.disabled = true;
             btn.innerHTML = '<span class="loader"></span>처리 중...';
 
-            setTimeout(() => {
-                try {
-                    const temp = document.createElement('div');
-                    temp.innerHTML = inputHtml;
+            try {
+                // 1. 이미지 크기 확정 (워드/PPT가 크기를 인식하도록 width/height 속성 주입)
+                lockImageSizes(inputBox);
 
-                    // 1. 이모티콘 및 요청 기호(# *) 필터링 (쉼표와 띄어쓰기, HTML 태그, 이미지 영역은 완전 보존)
-                    cleanTextNodes(temp);
+                // 2. [핵심] 모든 이미지를 Base64로 변환하여 HTML에 완전히 내장
+                //    (blob: 임시 주소나 외부 주소가 남아있으면 워드/PPT에서 하얗게 보이는 원인이 됩니다)
+                const failedCount = await embedAllImages(inputBox);
 
-                    // 2. 줄바꿈 교정 및 마침표 보정
-                    const finalHtml = cleanStructureAndAddPeriods(temp);
+                const temp = document.createElement('div');
+                temp.innerHTML = inputBox.innerHTML;
 
-                    const outputBox = document.getElementById('outputBox');
-                    const resultArea = document.getElementById('resultArea');
-                    const charCount = document.getElementById('charCount');
+                // 3. 이모티콘 및 요청 기호(# *) 필터링 (쉼표·띄어쓰기·HTML 태그·이미지는 완전 보존)
+                cleanTextNodes(temp);
 
-                    outputBox.innerHTML = finalHtml;
-                    charCount.innerText = outputBox.textContent.length + "자";
-                    resultArea.classList.remove('hidden');
-                    
-                    resultArea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // 4. 줄바꿈 교정 및 마침표 보정
+                const finalHtml = cleanStructureAndAddPeriods(temp);
 
-                } catch (error) {
-                    console.error('Processing error:', error);
-                    showToast("오류가 발생했습니다.");
-                } finally {
-                    btn.disabled = false;
-                    btn.innerHTML = originalBtnHtml;
+                const outputBox = document.getElementById('outputBox');
+                const resultArea = document.getElementById('resultArea');
+                const charCount = document.getElementById('charCount');
+
+                outputBox.innerHTML = finalHtml;
+                charCount.innerText = outputBox.textContent.length + "자";
+                resultArea.classList.remove('hidden');
+                
+                resultArea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                if (failedCount > 0) {
+                    showToast(failedCount + "개 이미지는 보안 정책으로 변환되지 않아 붙여넣기 시 누락될 수 있습니다.");
                 }
-            }, 300);
+
+            } catch (error) {
+                console.error('Processing error:', error);
+                showToast("오류가 발생했습니다.");
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalBtnHtml;
+            }
         }
 
-        // 기능 1: 스타일과 이미지 크기를 지닌 서식(HTML) 데이터 복사 적용
-        function copyFormattedResult() {
-            const outputBox = document.getElementById('outputBox');
-            const hasText = outputBox.textContent.trim().length > 0;
-            const hasImage = outputBox.querySelector('img') !== null;
-            if (!hasText && !hasImage) return;
-
-            // 임시 에디터를 생성하여 복사용 HTML 구조 클리닝 필터 적용
+        // 워드/PPT 호환용 복사 HTML 생성 (제목 태그 정규화 + 글자 크기 지시 제거)
+        function buildCompatibleHtml(sourceElement) {
             const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = outputBox.innerHTML;
+            tempDiv.innerHTML = sourceElement.innerHTML;
 
-            // 1. PPT/워드에서 극단적으로 글자 크기가 깨지는 H1~H6 태그를 div 표준태그 + strong(굵게)으로 안전하게 매핑합니다.
+            // 1. H1~H6 태그를 div + strong으로 안전하게 매핑 (PPT/워드에서 글자 크기 폭주 방지)
             const headings = tempDiv.querySelectorAll('h1, h2, h3, h4, h5, h6');
             headings.forEach(h => {
                 const div = document.createElement('div');
@@ -488,49 +542,117 @@
                 h.parentNode.replaceChild(div, h);
             });
 
-            // 2. 개별 태그에 묻어있는 font-size 스타일 및 size 어트리뷰트, line-height들을 지워내어 PPT가 슬라이드 마스터 본문 크기를 온전히 승계하도록 유도합니다.
+            // 2. font-size / size / line-height 제거 → PPT가 슬라이드 마스터 본문 크기를 승계
             const allElements = tempDiv.querySelectorAll('*');
             allElements.forEach(el => {
-                if (el.style.fontSize) {
+                if (el.style && el.style.fontSize) {
                     el.style.fontSize = '';
                 }
-                if (el.hasAttribute('size')) {
+                if (el.hasAttribute && el.hasAttribute('size')) {
                     el.removeAttribute('size');
                 }
-                if (el.style.lineHeight) {
+                if (el.style && el.style.lineHeight) {
                     el.style.lineHeight = '';
                 }
             });
 
-            const htmlContent = tempDiv.innerHTML;
-            const textContent = getCleanPlainText(outputBox); // 가공된 텍스트와 동기화 적용
+            // 3. [이미지 호환 강화] 워드/PPT가 확실히 인식하도록 이미지 속성 최종 점검
+            const imgs = tempDiv.querySelectorAll('img');
+            imgs.forEach(img => {
+                // max-width 같은 상대 CSS는 워드에서 무시/오작동할 수 있으므로 제거하고
+                // 절대 픽셀 크기(width/height 속성)만 남깁니다.
+                if (img.style) {
+                    img.style.maxWidth = '';
+                    img.style.display = '';
+                    img.style.verticalAlign = '';
+                }
+                if (!img.getAttribute('alt')) {
+                    img.setAttribute('alt', 'image');
+                }
+            });
 
-            // HTML 형식을 유지하면서도, 일반 텍스트 데이터도 동시에 저장하도록 클립보드에 기록합니다.
-            function listener(e) {
-                e.clipboardData.setData("text/html", htmlContent);
-                e.clipboardData.setData("text/plain", textContent);
-                e.preventDefault();
+            // 4. [핵심] 워드/PPT가 인코딩을 정확히 해석하도록 완전한 HTML 문서 형태로 감쌉니다.
+            //    (meta charset이 없으면 일부 환경에서 한글이 깨지거나 조각 해석에 실패해
+            //     이미지·서식이 통째로 무시되는 경우가 있습니다)
+            return '<html><head><meta charset="utf-8"></head><body>' + tempDiv.innerHTML + '</body></html>';
+        }
+
+        // 기능 1: 스타일과 이미지가 완전히 내장된 서식(HTML) 데이터 복사
+        // [수정] 최신 Clipboard API(navigator.clipboard.write)를 1순위로 사용하고,
+        //        미지원 브라우저에서는 기존 execCommand 방식으로 자동 대체합니다.
+        async function copyFormattedResult() {
+            const outputBox = document.getElementById('outputBox');
+            const hasText = outputBox.textContent.trim().length > 0;
+            const hasImage = outputBox.querySelector('img') !== null;
+            if (!hasText && !hasImage) return;
+
+            const btn = document.getElementById('copyFormattedBtn');
+            const originalBtnHtml = btn ? btn.innerHTML : null;
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="loader"></span>이미지 변환 중...';
             }
 
             try {
-                document.addEventListener("copy", listener);
-                document.execCommand('copy');
-                document.removeEventListener("copy", listener);
-                showToast("스타일과 이미지가 유지된 채 복사되었습니다.");
+                // [안전장치] 혹시라도 아직 Base64로 변환되지 않은 이미지가 남아있다면
+                // 복사 직전에 한 번 더 변환합니다. (정제 단계에서 이미 변환되어 대부분 즉시 통과)
+                await embedAllImages(outputBox);
+
+                const htmlContent = buildCompatibleHtml(outputBox);
+                const textContent = getCleanPlainText(outputBox);
+
+                let copied = false;
+
+                // [1순위] 최신 Clipboard API — HTML과 텍스트를 동시에 확실하게 기록
+                if (navigator.clipboard && window.ClipboardItem) {
+                    try {
+                        const item = new ClipboardItem({
+                            'text/html': new Blob([htmlContent], { type: 'text/html' }),
+                            'text/plain': new Blob([textContent], { type: 'text/plain' })
+                        });
+                        await navigator.clipboard.write([item]);
+                        copied = true;
+                    } catch (e) {
+                        console.warn('Clipboard API 실패, execCommand로 대체:', e);
+                    }
+                }
+
+                // [2순위] 구형 방식 대체 (execCommand)
+                if (!copied) {
+                    function listener(e) {
+                        e.clipboardData.setData("text/html", htmlContent);
+                        e.clipboardData.setData("text/plain", textContent);
+                        e.preventDefault();
+                    }
+                    document.addEventListener("copy", listener);
+                    const ok = document.execCommand('copy');
+                    document.removeEventListener("copy", listener);
+                    copied = ok;
+                }
+
+                if (copied) {
+                    showToast("이미지가 내장된 상태로 복사되었습니다. 워드/PPT에 붙여넣으세요.");
+                } else {
+                    showToast("복사에 실패했습니다. 다시 시도해 주세요.");
+                }
             } catch (err) {
                 console.error('복사 실패:', err);
                 showToast("복사 중 오류가 발생했습니다.");
+            } finally {
+                if (btn && originalBtnHtml !== null) {
+                    btn.disabled = false;
+                    btn.innerHTML = originalBtnHtml;
+                }
             }
         }
 
-        // 기능 2: 모든 서식을 무시하고 오직 순수 텍스트만 원본 줄바꿈 그대로 클립보드에 복사 적용 (내용 없는 줄만 스킵)
+        // 기능 2: 모든 서식을 무시하고 오직 순수 텍스트만 복사
         function copyPlainTextOnly() {
             const outputBox = document.getElementById('outputBox');
             if (!outputBox.textContent.trim()) return;
 
             const textContent = getCleanPlainText(outputBox);
 
-            // 오직 text/plain 타입으로만 데이터를 기록해 모든 서식 요소와 이미지를 완전 차단합니다.
             function listener(e) {
                 e.clipboardData.setData("text/plain", textContent);
                 e.preventDefault();
@@ -561,7 +683,7 @@
             setTimeout(() => {
                 toast.style.opacity = '0';
                 toast.style.transform = 'translate(-50%, 0)';
-            }, 2500);
+            }, 3000);
         }
     </script>
 </body>
