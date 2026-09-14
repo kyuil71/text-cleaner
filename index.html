@@ -1,690 +1,279 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>텍스트 클리너 - 오프라인 정제 도구</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;700&display=swap');
-        
-        body {
-            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
-            background-color: #f1f5f9;
-        }
-
-        .custom-shadow {
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
-        }
-
-        /* 스크롤바 디자인 */
-        .editor-scroll {
-            scrollbar-width: thin;
-            scrollbar-color: #cbd5e1 transparent;
-        }
-
-        .editor-scroll::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        .editor-scroll::-webkit-scrollbar-thumb {
-            background-color: #cbd5e1;
-            border-radius: 10px;
-        }
-
-        /* ContentEditable Placeholder 구현 */
-        [contenteditable=true]:empty:before {
-            content: attr(placeholder);
-            color: #94a3b8;
-            pointer-events: none;
-            display: block;
-        }
-
-        /* 입력 및 결과창 내부 이미지 스타일 보존 및 레이아웃 붕괴 방지 */
-        #inputBox img, #outputBox img {
-            max-width: 100%;
-            display: inline-block;
-            vertical-align: middle;
-        }
-
-        /* 전체 문장 및 내부에 들어오는 모든 블록 요소의 줄간격을 최소화하고 여백을 완전히 제거 */
-        #inputBox, #outputBox {
-            line-height: 1.15 !important;
-        }
-
-        #inputBox p, #inputBox div, #inputBox h1, #inputBox h2, #inputBox h3, #inputBox h4, #inputBox h5, #inputBox h6,
-        #outputBox p, #outputBox div, #outputBox h1, #outputBox h2, #outputBox h3, #outputBox h4, #outputBox h5, #outputBox h6 {
-            margin-top: 0 !important;
-            margin-bottom: 0 !important;
-            padding-top: 0 !important;
-            padding-bottom: 0 !important;
-            line-height: 1.15 !important;
-        }
-
-        /* 로딩 효과 */
-        .loader {
-            border: 2px solid #f3f3f3;
-            border-top: 2px solid #ffffff;
-            border-radius: 50%;
-            width: 16px;
-            height: 16px;
-            animation: spin 1s linear infinite;
-            display: inline-block;
-            margin-right: 8px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-    </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src data:; connect-src blob:; media-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>오프라인 텍스트 클리너</title>
+  <style>
+    :root{--blue:#2563eb;--blue2:#1d4ed8;--ink:#172033;--muted:#64748b;--line:#dbe3ee;--soft:#f6f8fc;--ok:#15803d;--warn:#b45309;--danger:#b91c1c;--radius:18px}
+    *{box-sizing:border-box}
+    html{font-size:16px}
+    body{margin:0;min-height:100vh;padding:32px 16px;background:#eef2f7;color:var(--ink);font-family:Pretendard,"Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;line-height:1.55}
+    button,input{font:inherit}
+    button{cursor:pointer}
+    button:disabled{cursor:wait;opacity:.62}
+    :focus-visible{outline:3px solid #93c5fd;outline-offset:2px}
+    .app{width:min(860px,100%);margin:auto}
+    .card{background:#fff;border:1px solid #e6ebf2;border-radius:28px;padding:clamp(20px,4vw,38px);box-shadow:0 18px 45px rgba(15,23,42,.08)}
+    header{text-align:center;margin-bottom:26px}
+    .icon{display:grid;place-items:center;width:58px;height:58px;margin:0 auto 12px;border-radius:17px;background:#eaf2ff;color:var(--blue);font-size:28px;font-weight:800}
+    h1{margin:0;font-size:clamp(1.55rem,4vw,2rem);letter-spacing:-.035em}
+    header p{margin:8px auto 0;max-width:620px;color:var(--muted)}
+    .privacy{display:inline-flex;align-items:center;gap:7px;margin-top:12px;padding:6px 11px;border-radius:999px;background:#ecfdf3;color:#166534;font-size:.9rem;font-weight:700}
+    .privacy::before{content:"";width:8px;height:8px;border-radius:50%;background:#22c55e}
+    .section{margin-top:22px}
+    .row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 2px 8px}
+    .label{font-weight:750}
+    .toolbar{display:flex;gap:4px;padding:4px;border:1px solid var(--line);border-radius:12px;background:var(--soft)}
+    .tool{width:36px;height:34px;border:0;border-radius:8px;background:transparent;color:#334155;font-weight:800}
+    .tool:hover{background:#e5eaf1}
+    .editor{width:100%;min-height:210px;max-height:430px;overflow:auto;padding:16px;border:1px solid var(--line);border-radius:var(--radius);background:#fbfcfe;color:#263247;line-height:1.5;overflow-wrap:anywhere}
+    .editor:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.12);outline:0}
+    .editor:empty::before{content:attr(data-placeholder);color:#94a3b8;pointer-events:none}
+    .editor img{max-width:100%;height:auto;vertical-align:middle}
+    .editor p,.editor div,.editor h1,.editor h2,.editor h3,.editor h4,.editor h5,.editor h6{margin:.25em 0}
+    .options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
+    .option{display:flex;align-items:flex-start;gap:10px;min-height:62px;padding:12px;border:1px solid var(--line);border-radius:14px;background:#fff}
+    .option:hover{background:#f8fafc}
+    .option input{width:19px;height:19px;margin:2px 0 0;accent-color:var(--blue);flex:0 0 auto}
+    .option b{display:block;font-size:.98rem}
+    .option small{display:block;color:var(--muted);font-size:.84rem;line-height:1.35;margin-top:2px}
+    .actions{display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-top:18px}
+    .btn{min-height:49px;border:0;border-radius:13px;padding:12px 16px;font-weight:750;transition:.15s transform,.15s background}
+    .btn:active{transform:scale(.985)}
+    .primary{background:var(--blue);color:#fff;box-shadow:0 8px 18px rgba(37,99,235,.18)}
+    .primary:hover{background:var(--blue2)}
+    .secondary{background:#edf1f6;color:#334155}
+    .secondary:hover{background:#e2e8f0}
+    .dark{background:#1e293b;color:#fff}
+    .dark:hover{background:#0f172a}
+    .outline{background:#fff;border:1px solid var(--line);color:#334155}
+    .outline:hover{background:#f8fafc}
+    .result{display:none;margin-top:26px;padding-top:24px;border-top:1px solid #e8edf3}
+    .result.show{display:block}
+    .output{background:#f5f8ff;border-color:#cfe0ff}
+    .stats{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0 0;padding:0;list-style:none}
+    .stats li{padding:5px 9px;border-radius:999px;background:#eef2f7;color:#475569;font-size:.86rem}
+    .stats .success{background:#ecfdf3;color:var(--ok)}
+    .stats .warning{background:#fff7ed;color:var(--warn)}
+    .exports{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+    .notice{margin-top:12px;padding:11px 13px;border-radius:12px;background:#fff7ed;color:#8a480d;font-size:.9rem}
+    .notice:empty{display:none}
+    footer{text-align:center;color:var(--muted);font-size:.9rem;margin:18px 0 0}
+    .toast{position:fixed;left:50%;bottom:24px;z-index:20;transform:translate(-50%,20px);max-width:min(620px,calc(100% - 30px));padding:12px 18px;border-radius:14px;background:rgba(15,23,42,.95);color:#fff;opacity:0;pointer-events:none;transition:.2s;box-shadow:0 12px 30px rgba(0,0,0,.22);text-align:center}
+    .toast.show{opacity:1;transform:translate(-50%,0)}
+    .spinner{display:inline-block;width:17px;height:17px;margin-right:8px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;vertical-align:-3px;animation:spin .75s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    @media(max-width:650px){body{padding:14px 10px}.card{border-radius:22px}.options,.exports{grid-template-columns:1fr}.actions{grid-template-columns:1fr}.editor{min-height:190px}.row{align-items:flex-end}.privacy{font-size:.82rem}}
+    @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
+    @media print{body{background:#fff;padding:0}.card{border:0;box-shadow:none;padding:0}header,.section.input-section,.actions,.exports,.stats,.notice,footer{display:none!important}.result{display:block!important;border:0;margin:0;padding:0}.output{border:0;max-height:none;background:#fff;padding:0}}
+  </style>
 </head>
-<body class="min-h-screen py-10 px-4">
-    <div class="max-w-2xl mx-auto">
-        <!-- 메인 카드 -->
-        <div class="bg-white rounded-3xl p-6 md:p-10 custom-shadow border border-slate-100">
-            <header class="text-center mb-8">
-                <div class="inline-flex items-center justify-center w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl mb-4">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                    </svg>
-                </div>
-                <h1 class="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight">로컬 텍스트 클리너</h1>
-                <p class="text-slate-500 mt-2">강조 스타일과 이미지는 그대로 유지하고 이모티콘과 불필요한 줄바꿈만 정제합니다.</p>
-            </header>
+<body>
+  <main class="app">
+    <article class="card">
+      <header>
+        <div class="icon" aria-hidden="true">T</div>
+        <h1>오프라인 텍스트 클리너</h1>
+        <p>텍스트·기본 서식·붙여넣은 이미지를 기기 안에서 정리합니다.</p>
+        <span class="privacy">외부 서버 전송 없음 · 인터넷 불필요</span>
+      </header>
 
-            <div class="space-y-6">
-                <!-- 입력 섹션 -->
-                <div>
-                    <div class="flex items-center justify-between mb-2 ml-1">
-                        <label for="inputBox" class="text-sm font-semibold text-slate-700">내용 입력</label>
-                        <!-- 서식 툴바 -->
-                        <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/60">
-                            <button type="button" onclick="format('bold')" title="굵게" class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-700 hover:bg-slate-200 font-bold text-sm transition-all">B</button>
-                            <button type="button" onclick="format('italic')" title="기울임" class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-700 hover:bg-slate-200 italic text-sm transition-all">I</button>
-                            <button type="button" onclick="format('underline')" title="밑줄" class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-700 hover:bg-slate-200 underline text-sm transition-all">U</button>
-                        </div>
-                    </div>
-                    <!-- contenteditable을 통해 볼드체/스타일 원본 유지 -->
-                    <div 
-                        id="inputBox" 
-                        contenteditable="true"
-                        placeholder="변환할 문장을 입력하거나 붙여넣으세요... 굵은 글씨와 이미지 크기는 그대로 보존됩니다." 
-                        class="w-full h-48 p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none overflow-y-auto text-slate-700 editor-scroll"
-                    ></div>
-                </div>
+      <section class="section input-section" aria-labelledby="inputLabel">
+        <div class="row">
+          <span id="inputLabel" class="label">내용 입력</span>
+          <div class="toolbar" aria-label="텍스트 서식">
+            <button class="tool" type="button" data-command="bold" aria-label="굵게" title="굵게">B</button>
+            <button class="tool" type="button" data-command="italic" aria-label="기울임" title="기울임"><i>I</i></button>
+            <button class="tool" type="button" data-command="underline" aria-label="밑줄" title="밑줄"><u>U</u></button>
+          </div>
+        </div>
+        <div id="inputBox" class="editor" contenteditable="true" role="textbox" aria-labelledby="inputLabel" aria-multiline="true" spellcheck="true" data-placeholder="변환할 문장을 입력하거나 붙여넣으세요. 클립보드의 이미지도 함께 붙여넣을 수 있습니다."></div>
 
-                <!-- 작업 버튼 -->
-                <div class="grid grid-cols-2 gap-3">
-                    <button 
-                        onclick="clearInput()"
-                        class="py-3.5 px-6 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold rounded-xl transition-all active:scale-95"
-                    >
-                        지우기
-                    </button>
-                    <button 
-                        id="processBtn"
-                        onclick="processTextLocal()"
-                        class="py-3.5 px-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-all shadow-md shadow-blue-100 active:scale-95 flex items-center justify-center gap-2"
-                    >
-                        텍스트 정제하기
-                    </button>
-                </div>
-
-                <!-- 결과 섹션 -->
-                <div id="resultArea" class="hidden animate-in fade-in slide-in-from-top-4 duration-300">
-                    <div class="flex items-center justify-between mb-2 px-1">
-                        <label class="text-sm font-semibold text-slate-700">정제된 결과</label>
-                        <span id="charCount" class="text-xs text-slate-400">0자</span>
-                    </div>
-                    <div class="space-y-3">
-                        <!-- 결과를 똑같이 서식 있는 상태로 렌더링 -->
-                        <div 
-                            id="outputBox" 
-                            class="w-full h-48 p-4 bg-blue-50/50 border border-blue-100 rounded-2xl text-slate-800 outline-none overflow-y-auto editor-scroll"
-                        ></div>
-                        
-                        <!-- 복사 버튼 컨테이너 (두 가지 기능 구현) -->
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <!-- 서식 포함 복사 -->
-                            <button 
-                                id="copyFormattedBtn"
-                                onclick="copyFormattedResult()"
-                                class="w-full py-3.5 px-5 bg-slate-800 hover:bg-black text-white rounded-xl text-sm font-semibold transition-all shadow-lg text-center active:scale-95"
-                            >
-                                서식·이미지 복사
-                            </button>
-
-                            <!-- 순수 텍스트만 복사 -->
-                            <button 
-                                onclick="copyPlainTextOnly()"
-                                class="w-full py-3.5 px-5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80 rounded-xl text-sm font-semibold transition-all text-center active:scale-95"
-                            >
-                                텍스트만 복사
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <div class="options" aria-label="정제 옵션">
+          <label class="option"><input id="removeEmoji" type="checkbox" checked><span><b>이모지 삭제</b><small>일반 문장부호와 한글은 유지합니다.</small></span></label>
+          <label class="option"><input id="cleanMarkdown" type="checkbox" checked><span><b>Markdown 기호 정리</b><small>제목·강조 용도의 #, *만 문맥에 따라 제거합니다.</small></span></label>
+          <label class="option"><input id="removeBlank" type="checkbox" checked><span><b>빈 줄 삭제</b><small>내용 없는 문단과 연속 빈 줄을 제거합니다.</small></span></label>
+          <label class="option"><input id="mergeWraps" type="checkbox" checked><span><b>잘린 문장 연결</b><small>문장 중간에서 잘린 긴 줄을 보수적으로 연결합니다.</small></span></label>
+          <label class="option"><input id="addPeriods" type="checkbox"><span><b>문장 마침표 보정</b><small>제목·목록·URL을 제외한 문장에만 적용합니다.</small></span></label>
+          <label class="option"><input id="keepImages" type="checkbox" checked><span><b>이미지 포함</b><small>클립보드 이미지 데이터를 결과에 내장합니다.</small></span></label>
         </div>
 
-        <!-- 하단 정보 -->
-        <p class="text-center text-slate-400 text-sm mt-8">
-            인터넷 연결 없이 안전하게 브라우저 내에서 텍스트 서식을 보존하며 정제합니다.
-        </p>
-    </div>
+        <div class="actions">
+          <button id="clearBtn" class="btn secondary" type="button">전체 지우기</button>
+          <button id="processBtn" class="btn primary" type="button">텍스트 정제하기</button>
+        </div>
+      </section>
 
-    <!-- 토스트 알림 메시지 상자 -->
-    <div id="toast" class="fixed bottom-8 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur-md text-white px-6 py-3 rounded-2xl text-sm font-medium opacity-0 transition-all pointer-events-none z-50 shadow-xl">
-        클립보드에 복사되었습니다.
-    </div>
+      <section id="resultArea" class="result" aria-labelledby="resultLabel">
+        <div class="row"><span id="resultLabel" class="label">정제된 결과</span><span id="charCount" aria-live="polite">0자</span></div>
+        <div id="outputBox" class="editor output" contenteditable="true" role="textbox" aria-labelledby="resultLabel" aria-multiline="true"></div>
+        <ul id="stats" class="stats" aria-label="정제 결과 통계"></ul>
+        <div id="notice" class="notice" role="status"></div>
+        <div class="exports">
+          <button id="copyFormattedBtn" class="btn dark" type="button">서식·이미지 복사</button>
+          <button id="copyTextBtn" class="btn secondary" type="button">텍스트만 복사</button>
+          <button id="saveBtn" class="btn outline" type="button">결과 HTML 저장</button>
+        </div>
+      </section>
+    </article>
+    <footer>모든 정제 과정은 현재 브라우저 안에서만 수행됩니다.</footer>
+  </main>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <script>
-        // 간단한 글자 스타일링 수행 기능
-        function format(command) {
-            document.execCommand(command, false, null);
-            document.getElementById('inputBox').focus();
+  <script>
+  (() => {
+    'use strict';
+    const $ = id => document.getElementById(id);
+    const input = $('inputBox'), output = $('outputBox'), result = $('resultArea');
+    const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+    const MAX_TOTAL_IMAGE_BYTES = 30 * 1024 * 1024;
+    const BLOCKS = new Set(['P','DIV','H1','H2','H3','H4','H5','H6','UL','OL','LI','BLOCKQUOTE','PRE','TABLE','THEAD','TBODY','TFOOT','TR','TD','TH']);
+    const ALLOWED = new Set(['P','DIV','BR','SPAN','STRONG','B','EM','I','U','S','SUB','SUP','H1','H2','H3','H4','H5','H6','UL','OL','LI','BLOCKQUOTE','PRE','CODE','TABLE','THEAD','TBODY','TFOOT','TR','TD','TH','IMG','A']);
+    const SAFE_STYLES = new Set(['font-weight','font-style','text-decoration','text-align','color','background-color','width','height']);
+    let toastTimer;
+
+    function toast(message){const el=$('toast');el.textContent=message;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),3200)}
+    function setBusy(busy){const b=$('processBtn');b.disabled=busy;b.innerHTML=busy?'<span class="spinner"></span>처리 중…':'텍스트 정제하기'}
+    function fileToDataURL(file){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(r.error||new Error('이미지를 읽지 못했습니다.'));r.readAsDataURL(file)})}
+    function insertHtmlAtCursor(html){input.focus();const sel=getSelection();if(!sel||!sel.rangeCount){input.insertAdjacentHTML('beforeend',html);return}const range=sel.getRangeAt(0);range.deleteContents();const fragment=range.createContextualFragment(html);const last=fragment.lastChild;range.insertNode(fragment);if(last){range.setStartAfter(last);range.collapse(true);sel.removeAllRanges();sel.addRange(range)}}
+    function escapeHtml(text){const d=document.createElement('div');d.textContent=text;return d.innerHTML}
+
+    async function onPaste(event){
+      const cd=event.clipboardData;if(!cd)return;
+      event.preventDefault();
+      const files=[...cd.items].filter(x=>x.kind==='file'&&x.type.startsWith('image/')).map(x=>x.getAsFile()).filter(Boolean);
+      if(files.length){
+        let html='';let total=0;
+        for(const file of files){
+          total+=file.size;
+          if(file.size>MAX_IMAGE_BYTES||total>MAX_TOTAL_IMAGE_BYTES){toast('이미지가 너무 큽니다. 이미지당 10MB, 전체 30MB 이하로 사용해 주세요.');continue}
+          try{html+='<img src="'+await fileToDataURL(file)+'" alt="붙여넣은 이미지">'}catch(_){toast('일부 이미지를 읽지 못했습니다.')}
         }
+        if(html)insertHtmlAtCursor(html);
+        const text=cd.getData('text/plain');if(text&&files.length===1&&cd.items.length>1)insertHtmlAtCursor('<div>'+escapeHtml(text).replace(/\r?\n/g,'<br>')+'</div>');
+        return;
+      }
+      const html=cd.getData('text/html');
+      if(html){const holder=document.createElement('div');holder.innerHTML=html;const report={removedUnsafe:0,externalImages:0};const safe=sanitize(holder,report,true);insertHtmlAtCursor(safe.innerHTML);if(report.externalImages)toast('웹 주소 이미지는 오프라인 보존이 어려워 제외했습니다. 이미지 자체를 복사해 붙여넣어 주세요.');return}
+      insertHtmlAtCursor(escapeHtml(cd.getData('text/plain')).replace(/\r?\n/g,'<br>'));
+    }
 
-        // 이모티콘 판별 정규식 (재사용을 위해 상수로 분리)
-        const EMOJI_REGEX = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1FA70}-\u{1FAFF}\u{1F1E0}-\u{1F1FF}\u{200D}\u{FE0F}]/gu;
+    function cleanStyle(styleText){
+      const probe=document.createElement('span');probe.setAttribute('style',styleText||'');const kept=[];
+      for(const name of SAFE_STYLES){const value=probe.style.getPropertyValue(name);if(value&&!/url\s*\(|expression\s*\(|javascript:/i.test(value))kept.push(name+':'+value)}
+      return kept.join(';');
+    }
 
-        /* ==========================================================================
-           [핵심 버그 수정] 워드/파워포인트에 붙여넣기 시 이미지가 하얗게(빈 칸으로) 나오는 문제
-           --------------------------------------------------------------------------
-           ▶ 원인:
-             웹페이지나 다른 프로그램에서 복사해 붙여넣은 이미지의 주소(src)는 대부분
-             "blob:..." (브라우저 임시 메모리 주소) 이거나 "https://..." (외부 웹 주소)입니다.
-             - blob: 주소는 그 브라우저 탭 안에서만 유효하기 때문에, 워드/PPT는
-               해당 주소에서 이미지를 절대 읽어올 수 없어 흰색 빈 상자만 표시됩니다.
-             - https: 외부 주소도 로그인/보안 정책 등으로 워드가 내려받지 못하면
-               똑같이 빈 이미지가 됩니다.
-           ▶ 해결:
-             모든 이미지를 복사 전에 Base64 데이터 URI(data:image/png;base64,...)로
-             변환하여, 이미지의 "실제 픽셀 데이터 자체"를 HTML 안에 완전히 심어 넣습니다.
-             이렇게 하면 워드/PPT가 외부에 접속할 필요 없이 클립보드 안의 데이터만으로
-             이미지를 100% 복원할 수 있습니다.
-           ========================================================================== */
-
-        // Blob(이진 데이터) → Base64 데이터 URI 문자열 변환
-        function blobToDataURL(blob) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result);
-                reader.onerror = () => reject(new Error('FileReader 실패'));
-                reader.readAsDataURL(blob);
-            });
+    function sanitize(source,report,keepImages){
+      const target=document.createElement('div');
+      function visit(node,parent){
+        if(node.nodeType===Node.TEXT_NODE){parent.appendChild(document.createTextNode(node.nodeValue));return}
+        if(node.nodeType!==Node.ELEMENT_NODE)return;
+        const tag=node.tagName.toUpperCase();
+        if(!ALLOWED.has(tag)){report.removedUnsafe++;[...node.childNodes].forEach(n=>visit(n,parent));return}
+        if(tag==='IMG'){
+          if(!keepImages)return;
+          const src=(node.getAttribute('src')||'').trim();
+          if(!/^data:image\/(png|jpeg|jpg|gif|webp);base64,/i.test(src)&&!/^blob:/i.test(src)){report.externalImages++;return}
+          const img=document.createElement('img');img.src=src;img.alt=(node.getAttribute('alt')||'이미지').slice(0,200);img.loading='eager';
+          const w=parseFloat(node.getAttribute('width')||node.style.width);const h=parseFloat(node.getAttribute('height')||node.style.height);
+          if(Number.isFinite(w)&&w>0)img.width=Math.min(Math.round(w),2400);if(Number.isFinite(h)&&h>0)img.height=Math.min(Math.round(h),2400);
+          parent.appendChild(img);return;
         }
-
-        // 이미지 src 하나를 Base64 데이터 URI로 변환 (2단계 안전장치)
-        async function srcToDataURL(src, imgEl) {
-            // [1단계] fetch로 원본 파일을 직접 내려받아 변환 (blob: 주소·같은 출처 이미지에 가장 확실)
-            //         → 원본 포맷(png/jpg/gif)과 화질이 그대로 유지됩니다.
-            try {
-                const resp = await fetch(src);
-                if (resp.ok) {
-                    const blob = await resp.blob();
-                    if (blob && blob.size > 0) {
-                        const dataUrl = await blobToDataURL(blob);
-                        if (dataUrl && dataUrl.startsWith('data:')) return dataUrl;
-                    }
-                }
-            } catch (e) {
-                // fetch가 막히면(외부 도메인 보안 정책 등) 2단계로 넘어갑니다.
-            }
-
-            // [2단계] 이미지를 캔버스에 다시 그려서 PNG로 추출 (외부 이미지 대비 예비 수단)
-            return new Promise((resolve) => {
-                const image = new Image();
-                image.crossOrigin = 'anonymous';
-                image.onload = () => {
-                    try {
-                        const canvas = document.createElement('canvas');
-                        canvas.width = image.naturalWidth || imgEl.width || 300;
-                        canvas.height = image.naturalHeight || imgEl.height || 300;
-                        canvas.getContext('2d').drawImage(image, 0, 0);
-                        resolve(canvas.toDataURL('image/png'));
-                    } catch (err) {
-                        // 보안 정책(CORS)으로 캔버스 추출까지 막힌 경우 → 원본 유지
-                        resolve(null);
-                    }
-                };
-                image.onerror = () => resolve(null);
-                image.src = src;
-            });
+        const el=document.createElement(tag.toLowerCase());
+        const style=cleanStyle(node.getAttribute('style'));if(style)el.setAttribute('style',style);
+        if(tag==='A'){
+          const href=(node.getAttribute('href')||'').trim();
+          if(/^(https?:|mailto:|tel:)/i.test(href)){el.href=href;el.rel='noopener noreferrer'}
         }
+        if(['TD','TH'].includes(tag))for(const a of ['colspan','rowspan']){const v=parseInt(node.getAttribute(a),10);if(v>1&&v<100)el.setAttribute(a,String(v))}
+        [...node.childNodes].forEach(n=>visit(n,el));parent.appendChild(el);
+      }
+      [...source.childNodes].forEach(n=>visit(n,target));return target;
+    }
 
-        // 컨테이너 안의 모든 이미지를 Base64로 임베드 (이미 data:인 이미지는 건너뜀)
-        // 반환값: 변환에 실패한 이미지 개수 (사용자 안내용)
-        async function embedAllImages(container) {
-            const imgs = container.querySelectorAll('img');
-            let failed = 0;
-            for (const img of imgs) {
-                const src = img.getAttribute('src') || '';
-                if (!src || src.startsWith('data:')) continue; // 이미 완전히 내장된 이미지
-                const dataUrl = await srcToDataURL(src, img);
-                if (dataUrl) {
-                    img.setAttribute('src', dataUrl);
-                } else {
-                    failed++;
-                }
-            }
-            return failed;
-        }
+    function removeEmoji(text){
+      try{return text.replace(/[\u{1F1E6}-\u{1F1FF}]{2}|[#*0-9]\uFE0F?\u20E3|\p{Extended_Pictographic}(?:\uFE0F|\p{Emoji_Modifier})?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F|\p{Emoji_Modifier})?)*/gu,'')}
+      catch(_){return text.replace(/[\uD83C-\uDBFF][\uDC00-\uDFFF]|[\u2600-\u27BF]/g,'')}
+    }
+    function cleanMarkdownText(text){
+      return text.replace(/^(\s{0,3})#{1,6}[ \t]+/gm,'$1').replace(/\*\*([^*\n]+)\*\*/g,'$1').replace(/__([^_\n]+)__/g,'$1').replace(/(^|[^\w])\*([^*\n]+)\*(?!\w)/g,'$1$2').replace(/^(\s*)\*[ \t]+/gm,'$1• ');
+    }
+    function walkText(root,fn){const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);const nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);nodes.forEach(n=>{n.nodeValue=fn(n.nodeValue)})}
+    function visibleText(el){return (el.textContent||'').replace(/[\s\u00a0\u200B\uFEFF]/g,'')}
+    function isEmpty(el){return !visibleText(el)&&!el.querySelector('img')}
+    function removeEmpty(root){[...root.querySelectorAll('*')].reverse().forEach(el=>{if(BLOCKS.has(el.tagName)&&isEmpty(el))el.remove()})}
+    function trimTrailingBreaks(root){root.querySelectorAll('p,div,li,blockquote').forEach(el=>{while(el.lastChild&&((el.lastChild.nodeType===1&&el.lastChild.tagName==='BR')||(el.lastChild.nodeType===3&&!el.lastChild.nodeValue.trim())))el.lastChild.remove()})}
+    function shouldMerge(a,b){
+      if(!a||!b||!['DIV','P'].includes(a.tagName)||!['DIV','P'].includes(b.tagName))return false;
+      if(a.querySelector('img,table,ul,ol,pre,blockquote')||b.querySelector('img,table,ul,ol,pre,blockquote'))return false;
+      const at=a.textContent.trim(),bt=b.textContent.trim();if(at.length<12||!bt)return false;
+      if(/[.!?。？！…:;]$/.test(at)||/^[•·\-–—▶▷▪■□※]|^\d+[.)]\s/.test(bt))return false;
+      return true;
+    }
+    function mergeWrappedBlocks(root,report){let n=root.firstElementChild;while(n){const next=n.nextElementSibling;if(next&&shouldMerge(n,next)){n.appendChild(document.createTextNode(' '));while(next.firstChild)n.appendChild(next.firstChild);next.remove();report.merged++;continue}n=next}}
+    function looksLikeSentence(el){
+      if(!['P','DIV','BLOCKQUOTE'].includes(el.tagName)||el.closest('li,th,td,pre')||el.querySelector('img'))return false;
+      const t=el.textContent.trim();if(t.length<8||/[.!?。？！…]$/.test(t)||/(https?:\/\/|www\.|\S+@\S+)\S*$/.test(t))return false;return /[가-힣A-Za-z0-9]$/.test(t);
+    }
+    function addPeriods(root,report){root.querySelectorAll('p,div,blockquote').forEach(el=>{if(looksLikeSentence(el)){const walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT);let last;while(walker.nextNode())if(walker.currentNode.nodeValue.trim())last=walker.currentNode;if(last){last.nodeValue=last.nodeValue.replace(/\s+$/,'')+'.';report.periods++}}})}
+    function graphemeLength(text){try{return [...new Intl.Segmenter('ko',{granularity:'grapheme'}).segment(text)].length}catch(_){return [...text].length}}
+    function plainText(el){return (el.innerText||el.textContent||'').replace(/[\u200B\uFEFF]/g,'').replace(/\u00a0/g,' ').split(/\r?\n/).map(x=>x.replace(/[ \t]+$/,'')).filter((x,i,a)=>x.trim()||i&&a[i-1].trim()).join('\r\n').trim()}
+    async function blobImagesToData(root,report){
+      const imgs=[...root.querySelectorAll('img[src^="blob:"]')];let total=0;
+      for(const img of imgs){try{const response=await fetch(img.src);const blob=await response.blob();total+=blob.size;if(blob.size>MAX_IMAGE_BYTES||total>MAX_TOTAL_IMAGE_BYTES)throw new Error('size');img.src=await fileToDataURL(blob);report.images++}catch(_){img.remove();report.externalImages++;}}
+      report.images=root.querySelectorAll('img[src^="data:image/"]').length;
+    }
 
-        // HTML 내부의 텍스트 노드들을 순회하며 필요한 요소들만 지우는 유틸리티
-        function cleanTextNodes(node) {
-            if (node.nodeType === Node.TEXT_NODE) {
-                let text = node.nodeValue;
-                const original = text;
+    async function process(){
+      if(!visibleText(input)&&!input.querySelector('img')){toast('정제할 내용을 먼저 입력해 주세요.');input.focus();return}
+      setBusy(true);
+      try{
+        const report={removedUnsafe:0,externalImages:0,images:0,merged:0,periods:0};
+        const safe=sanitize(input,report,$('keepImages').checked);
+        await blobImagesToData(safe,report);
+        walkText(safe,text=>{let x=text;if($('removeEmoji').checked)x=removeEmoji(x);if($('cleanMarkdown').checked)x=cleanMarkdownText(x);return x.replace(/[ \t]{2,}/g,' ')});
+        trimTrailingBreaks(safe);if($('removeBlank').checked)removeEmpty(safe);if($('mergeWraps').checked)mergeWrappedBlocks(safe,report);if($('addPeriods').checked)addPeriods(safe,report);
+        output.innerHTML=safe.innerHTML;
+        $('charCount').textContent=graphemeLength(output.textContent)+'자';
+        const stats=[['문장 연결 '+report.merged+'건',''],['마침표 보정 '+report.periods+'건',''],['내장 이미지 '+report.images+'개','success']];
+        if(report.removedUnsafe)stats.push(['위험 요소 제거 '+report.removedUnsafe+'건','warning']);if(report.externalImages)stats.push(['제외 이미지 '+report.externalImages+'개','warning']);
+        $('stats').innerHTML=stats.map(x=>'<li class="'+x[1]+'">'+x[0]+'</li>').join('');
+        $('notice').textContent=report.externalImages?'외부 주소 또는 너무 큰 이미지는 제외했습니다. 이미지 파일 자체를 복사하거나 저장된 파일을 붙여넣어 주세요.':'';
+        result.classList.add('show');result.scrollIntoView({behavior:'smooth',block:'start'});
+      }catch(err){console.error(err);toast('처리 중 오류가 발생했습니다. 입력 내용을 줄여 다시 시도해 주세요.')}finally{setBusy(false)}
+    }
 
-                // 1. 모든 종류의 이모티콘 삭제 (쉼표 등 일반 문장부호는 절대 건드리지 않음)
-                text = text.replace(EMOJI_REGEX, '');
-                
-                // 2. 요청 기호 제거 (# 및 *만 제거, 쉼표[,]는 본연의 기본 특성이므로 완전 보존!)
-                text = text.replace(/[#*]/g, '');
+    function compatibleHtml(){
+      const report={removedUnsafe:0,externalImages:0};const safe=sanitize(output,report,true);
+      safe.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(h=>{const d=document.createElement('div'),s=document.createElement('strong');s.innerHTML=h.innerHTML;d.appendChild(s);h.replaceWith(d)});
+      safe.querySelectorAll('*').forEach(el=>{el.style.fontSize='';el.style.lineHeight=''});
+      return '<!doctype html><html><head><meta charset="utf-8"><title>정제된 텍스트</title></head><body>'+safe.innerHTML+'</body></html>';
+    }
+    async function copyFormatted(){
+      if(!visibleText(output)&&!output.querySelector('img'))return;
+      const html=compatibleHtml(),text=plainText(output);let copied=false;
+      if(navigator.clipboard&&window.ClipboardItem){try{await navigator.clipboard.write([new ClipboardItem({'text/html':new Blob([html],{type:'text/html'}),'text/plain':new Blob([text],{type:'text/plain'})})]);copied=true}catch(_){}}
+      if(!copied){const listener=e=>{e.clipboardData.setData('text/html',html);e.clipboardData.setData('text/plain',text);e.preventDefault()};document.addEventListener('copy',listener);try{copied=document.execCommand('copy')}finally{document.removeEventListener('copy',listener)}}
+      toast(copied?'서식과 이미지가 포함된 결과를 복사했습니다.':'브라우저가 복사를 차단했습니다. 결과를 선택해 직접 복사해 주세요.');
+    }
+    async function copyText(){const text=plainText(output);if(!text)return;let copied=false;if(navigator.clipboard?.writeText)try{await navigator.clipboard.writeText(text);copied=true}catch(_){}if(!copied){const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();copied=document.execCommand('copy');ta.remove()}toast(copied?'텍스트만 복사했습니다.':'복사가 차단되었습니다.')}
+    function saveHtml(){
+      if(!visibleText(output)&&!output.querySelector('img'))return;
+      const css='body{max-width:900px;margin:40px auto;padding:0 20px;font:16px/1.6 "Malgun Gothic",system-ui,sans-serif;color:#172033}img{max-width:100%;height:auto}table{border-collapse:collapse}td,th{border:1px solid #cbd5e1;padding:6px 9px}';
+      const html='<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>정제된 텍스트</title><style>'+css+'</style></head><body>'+output.innerHTML+'</body></html>';
+      const url=URL.createObjectURL(new Blob([html],{type:'text/html;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='cleaned-text.html';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('인터넷 없이 열 수 있는 HTML 파일로 저장했습니다.');
+    }
 
-                // 이모티콘·기호가 지워진 "그 자리"에만 생긴 이중 공백을 한 칸으로 정리합니다.
-                if (text !== original) {
-                    text = text.replace(/ {2,}/g, ' ');
-                }
-
-                node.nodeValue = text;
-            } else if (node.nodeType === Node.ELEMENT_NODE) {
-                if (node.tagName === 'IMG') {
-                    return; // 이미지는 자체로 완전하므로 가공을 건너뜁니다.
-                }
-                for (let i = 0; i < node.childNodes.length; i++) {
-                    cleanTextNodes(node.childNodes[i]);
-                }
-            }
-        }
-
-        // 문단의 "실제 마지막 내용물"(텍스트 또는 이미지)을 찾아주는 헬퍼 함수
-        function getLastMeaningfulNode(node) {
-            if (node.nodeType === Node.TEXT_NODE) {
-                const text = node.nodeValue.replace(/[\s\u00a0\u200B]/g, '');
-                if (text.length > 0) {
-                    return node;
-                }
-                return null;
-            }
-            if (node.nodeType === Node.ELEMENT_NODE) {
-                if (node.tagName === 'IMG') {
-                    return node;
-                }
-                for (let i = node.childNodes.length - 1; i >= 0; i--) {
-                    const found = getLastMeaningfulNode(node.childNodes[i]);
-                    if (found) {
-                        return found;
-                    }
-                }
-            }
-            return null;
-        }
-
-        // 마침표 누락 시 보완 기능 (글자/숫자로 끝날 때만 마침표 추가, 이미지·문장부호로 끝나면 원본 보존)
-        function ensurePeriod(element) {
-            const lastNode = getLastMeaningfulNode(element);
-            if (!lastNode || lastNode.nodeType !== Node.TEXT_NODE) return;
-
-            const trimmed = lastNode.nodeValue.replace(/[\s\u00a0\u200B]+$/, '');
-            if (trimmed.length === 0) return;
-
-            const lastChar = trimmed.charAt(trimmed.length - 1);
-            if (/[\p{L}\p{N}]/u.test(lastChar)) {
-                lastNode.nodeValue = trimmed + '.';
-            } else {
-                lastNode.nodeValue = trimmed;
-            }
-        }
-
-        // 의미 없는 빈 줄바꿈 태그(<br>) 및 빈 inline 요소들 정리 함수
-        function removeTrailingBRs(element) {
-            while (element.lastChild) {
-                const last = element.lastChild;
-                if (last.nodeType === Node.ELEMENT_NODE && last.tagName === 'BR') {
-                    element.removeChild(last);
-                } else if (last.nodeType === Node.TEXT_NODE && last.nodeValue.replace(/[\s\u00a0\u200B]/g, '').length === 0) {
-                    element.removeChild(last);
-                } else {
-                    break;
-                }
-            }
-        }
-
-        // 실질적인 내용이 존재하지 않는 찌꺼기 요소를 제거하는 함수 (공백 태그는 내용으로 인정하여 보존)
-        function removeEmptyElements(element) {
-            const children = Array.from(element.childNodes);
-            children.forEach(child => {
-                if (child.nodeType === Node.ELEMENT_NODE) {
-                    removeEmptyElements(child);
-                    
-                    const hasImg = child.querySelector('img') !== null || child.tagName === 'IMG';
-                    const hasBr = child.querySelector('br') !== null || child.tagName === 'BR';
-                    const contentText = child.textContent.replace(/[\u200B\uFEFF]/g, '');
-                    
-                    if (!hasImg && !hasBr && contentText.length === 0) {
-                        element.removeChild(child);
-                    }
-                }
-            });
-        }
-
-        // 줄바꿈 구조 정리 및 종결 어미 마침표(.) 추가
-        function cleanStructureAndAddPeriods(tempDiv) {
-            removeEmptyElements(tempDiv);
-
-            const resultDiv = document.createElement('div');
-            let currentParagraph = null;
-
-            function flushCurrentParagraph() {
-                if (currentParagraph) {
-                    removeTrailingBRs(currentParagraph);
-                    const text = currentParagraph.textContent.replace(/[\s\u00a0\u200B]/g, '');
-                    const hasImage = currentParagraph.querySelector('img') !== null;
-                    
-                    if (text.length > 0 || hasImage) {
-                        ensurePeriod(currentParagraph);
-                        resultDiv.appendChild(currentParagraph);
-                    }
-                    currentParagraph = null;
-                }
-            }
-
-            Array.from(tempDiv.childNodes).forEach(node => {
-                const isBlock = node.nodeType === Node.ELEMENT_NODE && 
-                                ['DIV', 'P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI'].includes(node.tagName);
-                const isBr = node.nodeType === Node.ELEMENT_NODE && node.tagName === 'BR';
-
-                if (isBlock) {
-                    flushCurrentParagraph();
-                    
-                    const clonedBlock = node.cloneNode(true);
-                    removeTrailingBRs(clonedBlock);
-                    
-                    const text = clonedBlock.textContent.replace(/[\s\u00a0\u200B]/g, '');
-                    const hasImage = clonedBlock.querySelector('img') !== null;
-                    
-                    if (text.length > 0 || hasImage) {
-                        ensurePeriod(clonedBlock);
-                        resultDiv.appendChild(clonedBlock);
-                    }
-                } else if (isBr) {
-                    flushCurrentParagraph();
-                } else {
-                    if (!currentParagraph) {
-                        currentParagraph = document.createElement('div');
-                    }
-                    currentParagraph.appendChild(node.cloneNode(true));
-                }
-            });
-            
-            flushCurrentParagraph();
-            return resultDiv.innerHTML;
-        }
-
-        // 원본의 줄바꿈 구조는 유지하면서 순수 텍스트 생성 (줄 앞 들여쓰기 보존, 빈 줄만 제거)
-        function getCleanPlainText(element) {
-            const rawText = element.innerText || element.textContent || "";
-            return rawText.split(/\r?\n/)
-                .map(line => line
-                    .replace(/[\u200B\uFEFF]/g, '')
-                    .replace(/\u00a0/g, ' ')
-                    .replace(/[ \t]+$/, ''))
-                .filter(line => line.trim().length > 0)
-                .join('\r\n');
-        }
-
-        // 이미지 크기(너비/높이)를 HTML 속성 + 인라인 스타일로 고정하는 함수
-        function lockImageSizes(container) {
-            const liveImages = container.querySelectorAll('img');
-            liveImages.forEach(img => {
-                const computed = window.getComputedStyle(img);
-                const rect = img.getBoundingClientRect();
-                
-                let w = img.style.width || computed.width;
-                let h = img.style.height || computed.height;
-                
-                if (!w || w === 'auto') {
-                    w = rect.width ? rect.width + 'px' : (img.width ? img.width + 'px' : '');
-                }
-                if (!h || h === 'auto') {
-                    h = rect.height ? rect.height + 'px' : (img.height ? img.height + 'px' : '');
-                }
-                
-                const numW = parseFloat(w);
-                const numH = parseFloat(h);
-                
-                if (numW > 0 && !isNaN(numW)) {
-                    img.setAttribute('width', Math.round(numW));
-                    img.style.width = numW + 'px';
-                }
-                if (numH > 0 && !isNaN(numH)) {
-                    img.setAttribute('height', Math.round(numH));
-                    img.style.height = numH + 'px';
-                }
-            });
-        }
-
-        // 로컬 정제 핵심 함수
-        // [수정] 정제 단계에서 미리 모든 이미지를 Base64로 내장(embed)합니다.
-        //        이렇게 하면 복사 시점에는 추가 변환이 필요 없어, 복사가 즉시·안정적으로 동작합니다.
-        async function processTextLocal() {
-            const inputBox = document.getElementById('inputBox');
-            
-            // 입력창에 글자나 이미지가 모두 없는 경우 작동 방지
-            const hasText = inputBox.textContent.trim().length > 0;
-            const hasImage = inputBox.querySelector('img') !== null;
-            if (!hasText && !hasImage) return;
-
-            const btn = document.getElementById('processBtn');
-            const originalBtnHtml = btn.innerHTML;
-            
-            btn.disabled = true;
-            btn.innerHTML = '<span class="loader"></span>처리 중...';
-
-            try {
-                // 1. 이미지 크기 확정 (워드/PPT가 크기를 인식하도록 width/height 속성 주입)
-                lockImageSizes(inputBox);
-
-                // 2. [핵심] 모든 이미지를 Base64로 변환하여 HTML에 완전히 내장
-                //    (blob: 임시 주소나 외부 주소가 남아있으면 워드/PPT에서 하얗게 보이는 원인이 됩니다)
-                const failedCount = await embedAllImages(inputBox);
-
-                const temp = document.createElement('div');
-                temp.innerHTML = inputBox.innerHTML;
-
-                // 3. 이모티콘 및 요청 기호(# *) 필터링 (쉼표·띄어쓰기·HTML 태그·이미지는 완전 보존)
-                cleanTextNodes(temp);
-
-                // 4. 줄바꿈 교정 및 마침표 보정
-                const finalHtml = cleanStructureAndAddPeriods(temp);
-
-                const outputBox = document.getElementById('outputBox');
-                const resultArea = document.getElementById('resultArea');
-                const charCount = document.getElementById('charCount');
-
-                outputBox.innerHTML = finalHtml;
-                charCount.innerText = outputBox.textContent.length + "자";
-                resultArea.classList.remove('hidden');
-                
-                resultArea.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-                if (failedCount > 0) {
-                    showToast(failedCount + "개 이미지는 보안 정책으로 변환되지 않아 붙여넣기 시 누락될 수 있습니다.");
-                }
-
-            } catch (error) {
-                console.error('Processing error:', error);
-                showToast("오류가 발생했습니다.");
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = originalBtnHtml;
-            }
-        }
-
-        // 워드/PPT 호환용 복사 HTML 생성 (제목 태그 정규화 + 글자 크기 지시 제거)
-        function buildCompatibleHtml(sourceElement) {
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = sourceElement.innerHTML;
-
-            // 1. H1~H6 태그를 div + strong으로 안전하게 매핑 (PPT/워드에서 글자 크기 폭주 방지)
-            const headings = tempDiv.querySelectorAll('h1, h2, h3, h4, h5, h6');
-            headings.forEach(h => {
-                const div = document.createElement('div');
-                const strong = document.createElement('strong');
-                strong.innerHTML = h.innerHTML;
-                div.appendChild(strong);
-                if (h.getAttribute('style')) {
-                    div.setAttribute('style', h.getAttribute('style'));
-                }
-                h.parentNode.replaceChild(div, h);
-            });
-
-            // 2. font-size / size / line-height 제거 → PPT가 슬라이드 마스터 본문 크기를 승계
-            const allElements = tempDiv.querySelectorAll('*');
-            allElements.forEach(el => {
-                if (el.style && el.style.fontSize) {
-                    el.style.fontSize = '';
-                }
-                if (el.hasAttribute && el.hasAttribute('size')) {
-                    el.removeAttribute('size');
-                }
-                if (el.style && el.style.lineHeight) {
-                    el.style.lineHeight = '';
-                }
-            });
-
-            // 3. [이미지 호환 강화] 워드/PPT가 확실히 인식하도록 이미지 속성 최종 점검
-            const imgs = tempDiv.querySelectorAll('img');
-            imgs.forEach(img => {
-                // max-width 같은 상대 CSS는 워드에서 무시/오작동할 수 있으므로 제거하고
-                // 절대 픽셀 크기(width/height 속성)만 남깁니다.
-                if (img.style) {
-                    img.style.maxWidth = '';
-                    img.style.display = '';
-                    img.style.verticalAlign = '';
-                }
-                if (!img.getAttribute('alt')) {
-                    img.setAttribute('alt', 'image');
-                }
-            });
-
-            // 4. [핵심] 워드/PPT가 인코딩을 정확히 해석하도록 완전한 HTML 문서 형태로 감쌉니다.
-            //    (meta charset이 없으면 일부 환경에서 한글이 깨지거나 조각 해석에 실패해
-            //     이미지·서식이 통째로 무시되는 경우가 있습니다)
-            return '<html><head><meta charset="utf-8"></head><body>' + tempDiv.innerHTML + '</body></html>';
-        }
-
-        // 기능 1: 스타일과 이미지가 완전히 내장된 서식(HTML) 데이터 복사
-        // [수정] 최신 Clipboard API(navigator.clipboard.write)를 1순위로 사용하고,
-        //        미지원 브라우저에서는 기존 execCommand 방식으로 자동 대체합니다.
-        async function copyFormattedResult() {
-            const outputBox = document.getElementById('outputBox');
-            const hasText = outputBox.textContent.trim().length > 0;
-            const hasImage = outputBox.querySelector('img') !== null;
-            if (!hasText && !hasImage) return;
-
-            const btn = document.getElementById('copyFormattedBtn');
-            const originalBtnHtml = btn ? btn.innerHTML : null;
-            if (btn) {
-                btn.disabled = true;
-                btn.innerHTML = '<span class="loader"></span>이미지 변환 중...';
-            }
-
-            try {
-                // [안전장치] 혹시라도 아직 Base64로 변환되지 않은 이미지가 남아있다면
-                // 복사 직전에 한 번 더 변환합니다. (정제 단계에서 이미 변환되어 대부분 즉시 통과)
-                await embedAllImages(outputBox);
-
-                const htmlContent = buildCompatibleHtml(outputBox);
-                const textContent = getCleanPlainText(outputBox);
-
-                let copied = false;
-
-                // [1순위] 최신 Clipboard API — HTML과 텍스트를 동시에 확실하게 기록
-                if (navigator.clipboard && window.ClipboardItem) {
-                    try {
-                        const item = new ClipboardItem({
-                            'text/html': new Blob([htmlContent], { type: 'text/html' }),
-                            'text/plain': new Blob([textContent], { type: 'text/plain' })
-                        });
-                        await navigator.clipboard.write([item]);
-                        copied = true;
-                    } catch (e) {
-                        console.warn('Clipboard API 실패, execCommand로 대체:', e);
-                    }
-                }
-
-                // [2순위] 구형 방식 대체 (execCommand)
-                if (!copied) {
-                    function listener(e) {
-                        e.clipboardData.setData("text/html", htmlContent);
-                        e.clipboardData.setData("text/plain", textContent);
-                        e.preventDefault();
-                    }
-                    document.addEventListener("copy", listener);
-                    const ok = document.execCommand('copy');
-                    document.removeEventListener("copy", listener);
-                    copied = ok;
-                }
-
-                if (copied) {
-                    showToast("이미지가 내장된 상태로 복사되었습니다. 워드/PPT에 붙여넣으세요.");
-                } else {
-                    showToast("복사에 실패했습니다. 다시 시도해 주세요.");
-                }
-            } catch (err) {
-                console.error('복사 실패:', err);
-                showToast("복사 중 오류가 발생했습니다.");
-            } finally {
-                if (btn && originalBtnHtml !== null) {
-                    btn.disabled = false;
-                    btn.innerHTML = originalBtnHtml;
-                }
-            }
-        }
-
-        // 기능 2: 모든 서식을 무시하고 오직 순수 텍스트만 복사
-        function copyPlainTextOnly() {
-            const outputBox = document.getElementById('outputBox');
-            if (!outputBox.textContent.trim()) return;
-
-            const textContent = getCleanPlainText(outputBox);
-
-            function listener(e) {
-                e.clipboardData.setData("text/plain", textContent);
-                e.preventDefault();
-            }
-
-            try {
-                document.addEventListener("copy", listener);
-                document.execCommand('copy');
-                document.removeEventListener("copy", listener);
-                showToast("순수 텍스트만 복사되었습니다.");
-            } catch (err) {
-                console.error('복사 실패:', err);
-                showToast("복사 중 오류가 발생했습니다.");
-            }
-        }
-
-        function clearInput() {
-            document.getElementById('inputBox').innerHTML = '';
-            document.getElementById('resultArea').classList.add('hidden');
-        }
-
-        function showToast(message) {
-            const toast = document.getElementById('toast');
-            toast.innerText = message;
-            toast.style.opacity = '1';
-            toast.style.transform = 'translate(-50%, -20px)';
-
-            setTimeout(() => {
-                toast.style.opacity = '0';
-                toast.style.transform = 'translate(-50%, 0)';
-            }, 3000);
-        }
-    </script>
+    input.addEventListener('paste',onPaste);
+    document.querySelectorAll('[data-command]').forEach(b=>b.addEventListener('click',()=>{input.focus();document.execCommand(b.dataset.command,false,null)}));
+    $('processBtn').addEventListener('click',process);
+    $('clearBtn').addEventListener('click',()=>{input.innerHTML='';output.innerHTML='';result.classList.remove('show');$('notice').textContent='';input.focus()});
+    $('copyFormattedBtn').addEventListener('click',copyFormatted);$('copyTextBtn').addEventListener('click',copyText);$('saveBtn').addEventListener('click',saveHtml);
+  })();
+  </script>
 </body>
 </html>
