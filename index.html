@@ -1,243 +1,173 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>텍스트 클리너</title>
-<style>
-/* =========================================================================
-   완전 오프라인 동작: 외부 CSS·폰트·스크립트 요청이 하나도 없습니다.
-   폰트는 로컬에 설치된 것만 순서대로 시도합니다.
-   ========================================================================= */
-:root{
-  --paper:#e9eae8;
-  --surface:#fcfcfb;
-  --surface-sub:#f3f4f2;
-  --ink:#17181a;
-  --muted:#6c7076;
-  --line:#d9dbd7;
-  --line-soft:#e7e8e5;
-  --accent:#2f4f7f;
-  --accent-soft:#e6ecf4;
-  --warn:#8a5410;
-  --warn-soft:#f7efe2;
-  --radius:10px;
-}
-*{box-sizing:border-box}
-html,body{margin:0;padding:0}
-body{
-  background:var(--paper);
-  color:var(--ink);
-  font-family:'Pretendard Variable',Pretendard,'Apple SD Gothic Neo','Malgun Gothic','맑은 고딕',
-              -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR',sans-serif;
-  font-size:15px;
-  line-height:1.6;
-  -webkit-font-smoothing:antialiased;
-  padding:32px 16px 72px;
-}
-.wrap{max-width:780px;margin:0 auto}
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>텍스트 클리너</title>
+  <style>
+    /* ===================================================================
+       외부 CSS·폰트·스크립트 요청 없음. 인터넷 없이 그대로 동작합니다.
+       =================================================================== */
+    :root{--blue:#2563eb;--blue2:#1d4ed8;--ink:#172033;--muted:#64748b;--line:#dbe3ee;--soft:#f6f8fc;--ok:#15803d;--warn:#b45309;--radius:18px}
+    *{box-sizing:border-box}
+    html{font-size:16px}
+    body{margin:0;min-height:100vh;padding:32px 16px;background:#eef2f7;color:var(--ink);font-family:Pretendard,"Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;line-height:1.55}
+    button,input{font:inherit}
+    button{cursor:pointer;color:inherit}
+    button:disabled{cursor:wait;opacity:.62}
+    :focus-visible{outline:3px solid #93c5fd;outline-offset:2px}
 
-/* ---------- 헤더 ---------- */
-.masthead{display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin:0 2px 14px}
-.masthead h1{font-size:19px;font-weight:700;letter-spacing:-.02em;margin:0}
-.masthead p{margin:2px 0 0;font-size:13px;color:var(--muted)}
-.offline{
-  flex:none;font-size:12px;color:var(--muted);border:1px solid var(--line);
-  border-radius:100px;padding:3px 10px;background:var(--surface);white-space:nowrap;
-}
+    .app{width:min(860px,100%);margin:auto}
+    .card{background:#fff;border:1px solid #e6ebf2;border-radius:28px;padding:clamp(20px,4vw,38px);box-shadow:0 18px 45px rgba(15,23,42,.08)}
 
-/* ---------- 작업면 ---------- */
-.desk{
-  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
-  overflow:hidden;
-}
-.bar{
-  display:flex;align-items:center;justify-content:space-between;gap:12px;
-  padding:9px 12px;background:var(--surface-sub);border-bottom:1px solid var(--line-soft);
-}
-.bar h2{font-size:13px;font-weight:600;margin:0;color:var(--muted);letter-spacing:.01em}
-.bar .tools{display:flex;align-items:center;gap:4px}
+    header{text-align:center;margin-bottom:26px}
+    .icon{display:grid;place-items:center;width:58px;height:58px;margin:0 auto 12px;border-radius:17px;background:#eaf2ff;color:var(--blue);font-size:28px;font-weight:800}
+    h1{margin:0;font-size:clamp(1.55rem,4vw,2rem);letter-spacing:-.035em}
+    header p{margin:8px auto 0;max-width:620px;color:var(--muted)}
+    .privacy{display:inline-flex;align-items:center;gap:7px;margin-top:12px;padding:6px 11px;border-radius:999px;background:#ecfdf3;color:#166534;font-size:.9rem;font-weight:700}
+    .privacy::before{content:"";width:8px;height:8px;border-radius:50%;background:#22c55e}
 
-button{font:inherit;color:inherit;cursor:pointer;border:none;background:none}
-button:disabled{cursor:default;opacity:.55}
-button:focus-visible,[contenteditable]:focus-visible,input:focus-visible{
-  outline:2px solid var(--accent);outline-offset:2px;
-}
-.mini{
-  height:28px;min-width:28px;padding:0 9px;border-radius:7px;font-size:13px;
-  color:var(--muted);border:1px solid transparent;
-}
-.mini:hover{background:#fff;border-color:var(--line);color:var(--ink)}
-.mini b{font-weight:700}
-.mini i{font-style:italic}
-.mini u{text-underline-offset:2px}
+    .section{margin-top:22px}
+    .row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 2px 8px}
+    .label{font-weight:750}
+    .toolbar{display:flex;gap:4px;padding:4px;border:1px solid var(--line);border-radius:12px;background:var(--soft)}
+    .tool{width:36px;height:34px;border:0;border-radius:8px;background:transparent;color:#334155;font-weight:800}
+    .tool:hover{background:#e5eaf1}
+    .linkbtn{border:0;background:transparent;color:var(--blue);font-size:.9rem;font-weight:700;padding:4px 6px;border-radius:8px}
+    .linkbtn:hover{background:#eaf2ff}
 
-.editor{
-  min-height:190px;max-height:46vh;overflow-y:auto;padding:16px 18px;
-  line-height:1.55;outline:none;
-}
-.editor[contenteditable=true]:empty:before{
-  content:attr(data-placeholder);color:#9ea3a8;pointer-events:none;
-}
-.editor img{max-width:100%;height:auto;vertical-align:middle}
-.editor img.embed-failed{outline:2px dashed #b4641b;outline-offset:1px}
-.editor ul,.editor ol{margin:0;padding-left:22px}
-.editor table{border-collapse:collapse}
-.editor td,.editor th{border:1px solid var(--line);padding:3px 7px}
-.editor code{background:var(--surface-sub);padding:1px 4px;border-radius:4px;font-size:.92em}
-.editor blockquote{margin:0;padding-left:12px;border-left:2px solid var(--line)}
-::-webkit-scrollbar{width:9px}
-::-webkit-scrollbar-thumb{background:#c9cbc7;border-radius:9px;border:3px solid var(--surface)}
+    .editor{width:100%;min-height:210px;max-height:430px;overflow:auto;padding:16px;border:1px solid var(--line);border-radius:var(--radius);background:#fbfcfe;color:#263247;line-height:1.5;overflow-wrap:anywhere;outline:0}
+    .editor:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+    .editor:empty::before{content:attr(data-placeholder);color:#94a3b8;pointer-events:none}
+    .editor img{max-width:100%;height:auto;vertical-align:middle}
+    .editor img.embed-failed{outline:2px dashed #d97706;outline-offset:1px}
+    .editor p,.editor div,.editor h1,.editor h2,.editor h3,.editor h4,.editor h5,.editor h6{margin:.25em 0}
+    .editor ul,.editor ol{margin:.25em 0;padding-left:22px}
+    .editor table{border-collapse:collapse}
+    .editor td,.editor th{border:1px solid #cbd5e1;padding:4px 8px}
+    .editor code{background:#eef2f7;padding:1px 5px;border-radius:5px;font-size:.92em}
+    .editor blockquote{margin:.25em 0;padding-left:12px;border-left:3px solid #cfe0ff}
 
-/* ---------- 규칙 스트립 ---------- */
-.rules{padding:12px 12px 13px;background:var(--surface-sub);border-top:1px solid var(--line-soft)}
-.rules-head{display:flex;align-items:center;justify-content:space-between;margin:0 2px 9px}
-.rules-head span{font-size:13px;font-weight:600;color:var(--muted)}
-.chips{display:flex;flex-wrap:wrap;gap:6px}
-.chip{position:relative;display:inline-flex}
-.chip input{position:absolute;inset:0;opacity:0;margin:0;cursor:pointer}
-.chip label{
-  display:inline-flex;align-items:center;gap:6px;cursor:pointer;
-  font-size:13px;padding:5px 11px 5px 9px;border-radius:100px;
-  border:1px solid var(--line);background:var(--surface);color:var(--muted);
-  transition:background .12s,border-color .12s,color .12s;
-}
-.chip label:before{
-  content:"";width:13px;height:13px;border-radius:4px;flex:none;
-  border:1px solid #bcc0c3;background:#fff;
-}
-.chip input:checked + label{background:var(--accent-soft);border-color:#b9c9de;color:#233d63}
-.chip input:checked + label:before{
-  background:var(--accent);border-color:var(--accent);
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2.5 6.2l2.3 2.3 4.7-5' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/></svg>");
-  background-size:12px 12px;background-position:center;background-repeat:no-repeat;
-}
-.chip input:focus-visible + label{outline:2px solid var(--accent);outline-offset:2px}
+    .options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
+    .option{display:flex;align-items:flex-start;gap:10px;min-height:62px;padding:12px;border:1px solid var(--line);border-radius:14px;background:#fff;cursor:pointer}
+    .option:hover{background:#f8fafc}
+    .option input{width:19px;height:19px;margin:2px 0 0;accent-color:var(--blue);flex:0 0 auto;cursor:pointer}
+    .option b{display:block;font-size:.98rem}
+    .option small{display:block;color:var(--muted);font-size:.84rem;line-height:1.35;margin-top:2px}
 
-/* ---------- 실행 ---------- */
-.run{display:flex;gap:8px;margin:14px 0 0}
-.btn{
-  height:42px;padding:0 18px;border-radius:9px;font-size:14px;font-weight:600;
-  border:1px solid var(--line);background:var(--surface);color:var(--ink);
-  display:inline-flex;align-items:center;justify-content:center;gap:8px;
-}
-.btn:hover:not(:disabled){background:#fff}
-.btn.primary{flex:1;background:var(--accent);border-color:var(--accent);color:#fff}
-.btn.primary:hover:not(:disabled){background:#27416a}
-.kbd{font-size:12px;opacity:.72;font-weight:500}
-.spin{
-  width:14px;height:14px;border-radius:50%;flex:none;
-  border:2px solid rgba(255,255,255,.35);border-top-color:#fff;
-  animation:spin .7s linear infinite;
-}
-@keyframes spin{to{transform:rotate(360deg)}}
+    .actions{display:grid;grid-template-columns:1fr 1fr 2fr;gap:10px;margin-top:18px}
+    .btn{min-height:49px;border:0;border-radius:13px;padding:12px 16px;font-weight:750;transition:.15s transform,.15s background;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+    .btn:active{transform:scale(.985)}
+    .primary{background:var(--blue);color:#fff;box-shadow:0 8px 18px rgba(37,99,235,.18)}
+    .primary:hover:not(:disabled){background:var(--blue2)}
+    .secondary{background:#edf1f6;color:#334155}
+    .secondary:hover:not(:disabled){background:#e2e8f0}
+    .dark{background:#1e293b;color:#fff}
+    .dark:hover:not(:disabled){background:#0f172a}
+    .kbd{font-size:.82rem;font-weight:600;opacity:.75}
 
-/* ---------- 결과 ---------- */
-.result{margin-top:14px}
-.result[hidden]{display:none}
-.report{
-  display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px;
-}
-.stat{
-  font-size:12.5px;padding:4px 10px;border-radius:7px;
-  background:var(--surface);border:1px solid var(--line);color:var(--muted);
-}
-.stat b{font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
-.stat.alert{background:var(--warn-soft);border-color:#e6d3b4;color:var(--warn)}
-.stat.alert b{color:var(--warn)}
-.copies{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
-.note{margin:18px 2px 0;font-size:12.5px;color:var(--muted);line-height:1.7}
+    .result{margin-top:26px;padding-top:24px;border-top:1px solid #e8edf3}
+    .result[hidden]{display:none}
+    .output{background:#f5f8ff;border-color:#cfe0ff}
+    .report{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0 0;padding:0;list-style:none}
+    .stat{padding:5px 10px;border-radius:999px;background:#eef2f7;color:#475569;font-size:.86rem}
+    .stat b{font-weight:800;font-variant-numeric:tabular-nums}
+    .stat.alert{background:#fff7ed;color:var(--warn)}
+    .exports{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:12px}
+    .note{margin-top:12px;padding:11px 13px;border-radius:12px;background:#fff7ed;color:#8a480d;font-size:.9rem;line-height:1.5}
+    footer{text-align:center;color:var(--muted);font-size:.9rem;margin:18px 0 0}
 
-/* ---------- 토스트 ---------- */
-#toast{
-  position:fixed;left:50%;bottom:26px;transform:translate(-50%,10px);
-  background:#1c1e21;color:#fff;font-size:13.5px;padding:11px 18px;border-radius:9px;
-  opacity:0;pointer-events:none;transition:opacity .18s ease,transform .18s ease;
-  max-width:calc(100% - 32px);text-align:center;z-index:99;
-  box-shadow:0 6px 24px rgba(0,0,0,.22);
-}
-#toast.on{opacity:1;transform:translate(-50%,0)}
+    .toast{position:fixed;left:50%;bottom:24px;z-index:20;transform:translate(-50%,20px);max-width:min(620px,calc(100% - 30px));padding:12px 18px;border-radius:14px;background:rgba(15,23,42,.95);color:#fff;opacity:0;pointer-events:none;transition:.2s;box-shadow:0 12px 30px rgba(0,0,0,.22);text-align:center}
+    .toast.on{opacity:1;transform:translate(-50%,0)}
+    .spin{display:inline-block;width:17px;height:17px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .75s linear infinite;flex:0 0 auto}
+    @keyframes spin{to{transform:rotate(360deg)}}
 
-@media (max-width:560px){
-  body{padding:20px 12px 60px}
-  .copies{grid-template-columns:1fr}
-  .masthead{flex-direction:column;align-items:flex-start;gap:6px}
-}
-@media (prefers-reduced-motion:reduce){
-  *{animation-duration:0s !important;transition-duration:0s !important}
-}
-</style>
+    @media(max-width:650px){
+      body{padding:14px 10px}.card{border-radius:22px}
+      .options,.exports,.actions{grid-template-columns:1fr}
+      .editor{min-height:190px}.row{align-items:flex-end}.privacy{font-size:.82rem}
+    }
+    @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
+    @media print{
+      body{background:#fff;padding:0}
+      .card{border:0;box-shadow:none;padding:0}
+      header,.section.input-section,.actions,.exports,.report,.note,footer{display:none!important}
+      .result{display:block!important;border:0;margin:0;padding:0}
+      .output{border:0;max-height:none;background:#fff;padding:0}
+    }
+  </style>
 </head>
 <body>
-<div class="wrap">
+  <main class="app">
+    <article class="card">
+      <header>
+        <div class="icon" aria-hidden="true">T</div>
+        <h1>텍스트 클리너</h1>
+        <p>이모지와 마크다운 흔적을 걷어내고, 굵기·목록·표·이미지는 그대로 둔 채 워드·PPT에 붙여넣습니다.</p>
+        <span class="privacy">외부 서버 전송 없음 · 인터넷 불필요</span>
+      </header>
 
-  <div class="masthead">
-    <div>
-      <h1>텍스트 클리너</h1>
-      <p>이모지와 마크다운 흔적을 걷어내고, 굵기·이미지는 그대로 둔 채 워드·PPT에 붙여넣습니다.</p>
-    </div>
-    <span class="offline">오프라인 전용</span>
-  </div>
+      <section class="section input-section" aria-labelledby="inputLabel">
+        <div class="row">
+          <span id="inputLabel" class="label">내용 입력</span>
+          <div class="toolbar" aria-label="텍스트 서식">
+            <button class="tool" type="button" data-cmd="bold" aria-label="굵게" title="굵게">B</button>
+            <button class="tool" type="button" data-cmd="italic" aria-label="기울임" title="기울임"><i>I</i></button>
+            <button class="tool" type="button" data-cmd="underline" aria-label="밑줄" title="밑줄"><u>U</u></button>
+          </div>
+        </div>
 
-  <div class="desk">
-    <div class="bar">
-      <h2>붙여넣기</h2>
-      <div class="tools">
-        <button class="mini" type="button" data-cmd="bold" title="굵게"><b>B</b></button>
-        <button class="mini" type="button" data-cmd="italic" title="기울임"><i>I</i></button>
-        <button class="mini" type="button" data-cmd="underline" title="밑줄"><u>U</u></button>
-        <button class="mini" type="button" id="restoreBtn" title="정제 직전 상태로 되돌리기">되돌리기</button>
-        <button class="mini" type="button" id="clearBtn">비우기</button>
-      </div>
-    </div>
+        <div id="inputBox" class="editor" contenteditable="true" role="textbox" aria-labelledby="inputLabel"
+             aria-multiline="true" spellcheck="false"
+             data-placeholder="여기에 붙여넣으세요. 굵기·기울임·목록·표·이미지는 유지됩니다."></div>
 
-    <div id="inputBox" class="editor" contenteditable="true" spellcheck="false"
-         data-placeholder="여기에 붙여넣으세요. 굵기·기울임·목록·표·이미지는 유지됩니다."></div>
+        <div class="row" style="margin-top:18px">
+          <span class="label">적용할 규칙</span>
+          <button id="toggleAllBtn" class="linkbtn" type="button">모두 끄기</button>
+        </div>
 
-    <div class="rules">
-      <div class="rules-head">
-        <span>적용할 규칙</span>
-        <button class="mini" type="button" id="toggleAllBtn">모두 끄기</button>
-      </div>
-      <div class="chips">
-        <span class="chip"><input type="checkbox" id="r-emoji" checked><label for="r-emoji">이모지 제거</label></span>
-        <span class="chip"><input type="checkbox" id="r-md" checked><label for="r-md">마크다운 기호 정리</label></span>
-        <span class="chip"><input type="checkbox" id="r-space" checked><label for="r-space">중복 공백 정리</label></span>
-        <span class="chip"><input type="checkbox" id="r-blank" checked><label for="r-blank">빈 줄 줄이기</label></span>
-        <span class="chip"><input type="checkbox" id="r-period"><label for="r-period">문장 끝 마침표</label></span>
-        <span class="chip"><input type="checkbox" id="r-resize"><label for="r-resize">큰 이미지 줄이기</label></span>
-      </div>
-    </div>
-  </div>
+        <div class="options chips" aria-label="정제 규칙">
+          <label class="option"><input id="r-emoji" type="checkbox" checked><span><b>이모지 제거</b><small>✓ ♪ © 같은 문서 기호와 문장부호는 그대로 둡니다.</small></span></label>
+          <label class="option"><input id="r-md" type="checkbox" checked><span><b>마크다운 기호 정리</b><small>**굵게**는 굵은 글씨로 바꾸고 3*4, #1은 건드리지 않습니다.</small></span></label>
+          <label class="option"><input id="r-space" type="checkbox" checked><span><b>중복 공백 정리</b><small>두 칸 이상 벌어진 자리만 한 칸으로 줄입니다.</small></span></label>
+          <label class="option"><input id="r-blank" type="checkbox" checked><span><b>빈 줄 줄이기</b><small>연속된 빈 줄을 한 줄로 줄이고 앞뒤 빈 줄을 없앱니다.</small></span></label>
+          <label class="option"><input id="r-period" type="checkbox"><span><b>문장 끝 마침표</b><small>종결어미로 끝나는 문장에만 붙이고 제목·항목명은 건너뜁니다.</small></span></label>
+          <label class="option"><input id="r-resize" type="checkbox"><span><b>큰 이미지 줄이기</b><small>긴 변이 1600px를 넘는 이미지만 줄여 붙여넣기를 가볍게 합니다.</small></span></label>
+        </div>
 
-  <div class="run">
-    <button class="btn primary" id="runBtn" type="button">정제하기 <span class="kbd">Ctrl + Enter</span></button>
-  </div>
+        <div class="actions">
+          <button id="restoreBtn" class="btn secondary" type="button" title="정제 직전 상태로 되돌리기">되돌리기</button>
+          <button id="clearBtn" class="btn secondary" type="button">전체 지우기</button>
+          <button id="runBtn" class="btn primary" type="button">텍스트 정제하기 <span class="kbd">Ctrl + Enter</span></button>
+        </div>
+      </section>
 
-  <div class="result" id="result" hidden>
-    <div class="desk" style="margin-top:14px">
-      <div class="bar">
-        <h2>결과 — 여기서 바로 고칠 수 있습니다</h2>
-        <span id="count" class="kbd" style="color:var(--muted)">0자</span>
-      </div>
-      <div id="outputBox" class="editor" contenteditable="true" spellcheck="false"></div>
-    </div>
+      <section id="result" class="result" aria-labelledby="resultLabel" hidden>
+        <div class="row">
+          <span id="resultLabel" class="label">정제된 결과 — 여기서 바로 고칠 수 있습니다</span>
+          <span id="count" aria-live="polite">0자</span>
+        </div>
+        <div id="outputBox" class="editor output" contenteditable="true" role="textbox"
+             aria-labelledby="resultLabel" aria-multiline="true" spellcheck="false"></div>
 
-    <div class="report" id="report" style="margin-top:12px"></div>
+        <div id="report" class="report" aria-label="정제 결과 요약"></div>
 
-    <div class="copies">
-      <button class="btn primary" id="copyRichBtn" type="button">서식과 이미지까지 복사</button>
-      <button class="btn" id="copyPlainBtn" type="button">글자만 복사</button>
-    </div>
-  </div>
+        <div class="exports">
+          <button id="copyRichBtn" class="btn dark" type="button">서식·이미지 복사</button>
+          <button id="copyPlainBtn" class="btn secondary" type="button">텍스트만 복사</button>
+        </div>
 
-  <p class="note">
-    복사할 때 이미지는 파일 데이터째로 클립보드에 담기므로, 워드나 PPT에서 빈 상자로 뜨지 않습니다.
-    다만 브라우저 보안 정책상 외부 사이트의 이미지는 담기지 않을 수 있고, 그런 이미지는 결과 화면에 점선으로 표시됩니다.
-  </p>
-</div>
+        <p class="note">
+          복사할 때 이미지는 파일 데이터째로 클립보드에 담기므로 워드나 PPT에서 빈 상자로 뜨지 않습니다.
+          다만 브라우저 보안 정책상 외부 사이트의 이미지는 담기지 않을 수 있고, 그런 이미지는 위 결과에 주황색 점선으로 표시됩니다.
+        </p>
+      </section>
+    </article>
+    <footer>모든 정제 과정은 현재 브라우저 안에서만 수행됩니다.</footer>
+  </main>
 
-<div id="toast" role="status" aria-live="polite"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <script>
 "use strict";
